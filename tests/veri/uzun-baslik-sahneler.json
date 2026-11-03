@@ -1,0 +1,14 @@
+[
+  {
+    "fotograf": "02-salon.png",
+    "baslik": "Açık Amerikan mutfaklı, yerden ısıtmalı, cam balkonlu ve Hilton banyolu eşyalı daire Erkmen'de çok uzun başlık denemesi",
+    "disSes": "Bu sahne, çok uzun bir başlığın ve uzun bir altyazının ekran dışına taşmadığını kontrol etmek için yazıldı. Altyazı da bilerek uzun tutuldu ki dört satır sınırı ve güvenli kenar boşlukları birlikte denensin; çğıİöşü ÇĞIÖŞÜ.",
+    "sureSn": 4
+  },
+  {
+    "fotograf": "07-bina.png",
+    "baslik": "ÇağrışımlıİstanbulŞişliÜsküdarÖğretmenlerÇarşısıGüneşliKelimeBölünmeDenemesi",
+    "disSes": "Bölünemeyen tek ve çok uzun bir kelimenin de taşmadığını kontrol ediyoruz.",
+    "sureSn": 4
+  }
+]

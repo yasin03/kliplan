@@ -1,0 +1,25 @@
+# Bağımlılıklar
+node_modules/
+
+# Ortam değişkenleri (API anahtarları asla commit edilmez)
+.env/
+.env.*
+.env.example/
+
+# Üretilen çıktılar ve önbellek
+cikti/*
+!cikti/.gitkeep
+.cache/
+out/
+build/
+coverage/
+
+# Gerçek ilan fotoğrafları (kişisel/ticari veri)
+ilanlar/*/fotograflar/*
+!ilanlar/*/fotograflar/.gitkeep
+docs/
+ilanlar/
+
+# Sistem
+.DS_Store
+*.log
