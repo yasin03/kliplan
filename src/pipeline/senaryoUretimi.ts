@@ -61,7 +61,7 @@ export function sahnelereDonustur(senaryo: YzSenaryo, tablo: Partial<Record<YerT
     fotograf: s.fotograf,
     baslik: yerTutuculariDoldur(s.baslik, tablo, "ekran"),
     disSes: sesler[i]!,
-    altyazi: yerTutuculariDoldur(s.disSes, tablo, "ekran"),
+    altyazi: yerTutuculariDoldur(s.ekranMetni, tablo, "ekran"),
     sureSn: sureler[i]!,
   }));
 }

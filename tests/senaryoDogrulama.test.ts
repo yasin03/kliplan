@@ -18,31 +18,37 @@ function gecerliSenaryo(): YzSenaryo {
         fotograf: "01-bina.png",
         baslik: "Sıfır binada iki artı bir",
         disSes: "{{konum}} konumunda, yeni yapılmış bir binada eşyalı, iki artı bir daire.",
+        ekranMetni: "{{konum}}",
       },
       {
         fotograf: "02-salon.png",
         baslik: "Eşyalı salon",
         disSes: "Salon koltuk takımıyla birlikte eşyalı. Net kullanım alanı {{netM2}}.",
+        ekranMetni: "Eşyalı · Net {{netM2}}",
       },
       {
         fotograf: "03-mutfak.png",
         baslik: "Açık Amerikan mutfak",
         disSes: "Açık Amerikan mutfakta ankastre set, buzdolabı ve bulaşık makinesi bulunuyor.",
+        ekranMetni: "Ankastre set · Bulaşık makinesi",
       },
       {
         fotograf: "04-yatak-odasi.png",
         baslik: "Yerden ısıtma",
         disSes: "Isınma doğalgazlı kombi ve yerden ısıtmayla sağlanıyor.",
+        ekranMetni: "Kombi · Yerden ısıtma",
       },
       {
         fotograf: "05-koridor.png",
         baslik: "Hilton banyo",
         disSes: "Dairede Hilton banyo ve cam balkon, binada asansör ve görüntülü diyafon var.",
+        ekranMetni: "Cam balkon · Asansör",
       },
       {
         fotograf: "07-bina.png",
         baslik: "Fiyat: {{fiyat}}",
         disSes: "Fiyatı {{fiyat}}, daire krediye uygun. Ayrıntılı bilgi için Temurlar Grup'u arayın.",
+        ekranMetni: "Krediye uygun · {{telefon}}",
       },
     ],
   };
@@ -86,6 +92,29 @@ describe("senaryo doğrulaması", () => {
     expect(h).toContain('"getiri"');
     expect(h).toContain("rakam kullanılamaz");
     expect(h).toContain('"Temurlar Grup" adı geçmeli');
+  });
+
+  it("ekran metnini başlıkla aynı kurallarla denetliyor; uzunluk ve tekrar sınırı var", () => {
+    const h = hatalar(
+      bozulmus((s) => {
+        s.sahneler[0]!.ekranMetni = "Erkmen'de kaçırılmaz fırsat";
+        s.sahneler[1]!.ekranMetni = "Net 65 m²";
+        s.sahneler[2]!.ekranMetni = "Ankastre set, buzdolabı, bulaşık makinesi ve çamaşır makinesi";
+        s.sahneler[3]!.ekranMetni = "Yerden ısıtma";
+        s.sahneler[4]!.ekranMetni = "";
+      }),
+    ).join("\n");
+    expect(h).toContain('Sahne 1 ekran metni: konum adı ("Erkmen") doğrudan yazılamaz');
+    expect(h).toContain('Sahne 1 ekran metni: abartılı veya doğrulanamayan ifade kullanılamaz: "fırsat"');
+    expect(h).toContain("Sahne 2 ekran metni: rakam kullanılamaz");
+    expect(h).toContain("Sahne 3 ekran metni: en fazla 40 karakter olmalı");
+    expect(h).toContain("Sahne 4 ekran metni: başlığı veya dış sesi tekrar etmemeli");
+    expect(h).toContain("Sahne 5: ekran metni boş.");
+  });
+
+  it("ekran metninde telefon yer tutucusuna izin veriyor", () => {
+    expect(hatalar(gecerliSenaryo())).toEqual([]);
+    expect(gecerliSenaryo().sahneler.at(-1)!.ekranMetni).toContain("{{telefon}}");
   });
 
   it("son sahnede fiyat yoksa reddediyor", () => {

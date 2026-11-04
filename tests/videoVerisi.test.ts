@@ -80,7 +80,7 @@ describe("fotoğraf hazırlama", () => {
   });
 
   it("sahnedeki fotoğraf ilan listesinde yoksa anlaşılır hata veriyor", () => {
-    const hazirlik = { publicKlasoru: "", logo: null, fotograflar: {} };
+    const hazirlik = { publicKlasoru: "", logo: null, muzik: null, fotograflar: {} };
     const sahneler = [{ fotograf: "yok.jpg", baslik: "a", disSes: "b", sureSn: 3 }];
     expect(() => videoPropsOlustur(temurlar(), sahneler, hazirlik)).toThrow(
       `Sahne 1: "yok.jpg" ilan.json'daki fotoğraf listesinde yok.`,

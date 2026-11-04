@@ -15,10 +15,13 @@
     "dogrula": "tsx src/cli/dogrula.ts",
     "studio": "tsx src/cli/studio.ts",
     "render:ornek": "tsx src/cli/ornekRender.ts",
-    "senaryo": "tsx src/cli/senaryo.ts"
+    "senaryo": "tsx src/cli/senaryo.ts",
+    "ses": "tsx src/cli/ses.ts",
+    "video": "tsx src/cli/video.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.4.0",
+    "@google/genai": "2.31.0",
     "@remotion/bundler": "4.0.540",
     "@remotion/cli": "4.0.540",
     "@remotion/fonts": "4.0.540",
@@ -27,6 +30,7 @@
     "@remotion/transitions": "4.0.540",
     "commander": "15.0.0",
     "dotenv": "18.0.9",
+    "microsoft-cognitiveservices-speech-sdk": "1.52.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "remotion": "4.0.540",

@@ -38,6 +38,12 @@ export const tema = {
     /** Kaydırma miktarı (piksel). */
     kaydirma: 40,
   },
+  ses: {
+    /** Fon müziğinin dış sesin altındaki seviyesi (0-1). */
+    muzikSeviyesi: 0.1,
+    /** Müziğin başta açılma ve sonda kısılma süresi (saniye). */
+    muzikGecisSn: 1.5,
+  },
   /** Genişlik/yükseklik oranı bunun altındaki (9:16’ya yakın) fotoğraflar ekranı kaplar; diğerleri (3:4 dahil) kırpılmadan bulanık dolgu üzerinde gösterilir. */
   dikeyOranSiniri: 0.65,
 } as const;

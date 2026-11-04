@@ -121,6 +121,14 @@ async function fotograflariKontrolEt(klasor: string, ilan: Ilan, rapor: KontrolR
   if (ilan.logo && !(await dosyaVarMi(path.join(klasor, ilan.logo)))) {
     rapor.hata("Logo", `Logo dosyası bulunamadı: ${ilan.logo}`);
   }
+
+  if (ilan.muzik) {
+    if (!(await dosyaVarMi(path.join(klasor, ilan.muzik.dosya)))) {
+      rapor.hata("Müzik", `Müzik dosyası bulunamadı: ${ilan.muzik.dosya}`);
+    } else {
+      rapor.uyari("Müzik", `Ticari kullanım izni elle doğrulanmalı. Belirtilen lisans: ${ilan.muzik.lisans}`);
+    }
+  }
 }
 
 /** İlan klasörünü okur; şema, fotoğraf ve tutarlılık kontrollerinin sonucunu döner. Hata fırlatmaz. */

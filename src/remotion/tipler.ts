@@ -6,9 +6,11 @@ export type Sahne = {
   baslik: string;
   /** Seslendirilecek metin (sayılar okunuşa göre, ör. "4 milyon 500 bin lira"). */
   disSes: string;
-  /** Ekranda gösterilecek altyazı (ör. "4.500.000 TL"). Verilmezse dış ses metni gösterilir. */
+  /** Altta sahne boyunca sabit duran kısa ekran metni. Dış sesi tekrar etmez. Verilmezse dış ses metni gösterilir. */
   altyazi?: string | undefined;
   sureSn: number;
+  /** Faz 4: sahnenin dış ses dosyası (`public` klasörüne göre) ve sahne başından itibaren başlama anı. */
+  ses?: { src: string; baslangicSn: number } | undefined;
 };
 
 export type HazirFotograf = {
@@ -36,4 +38,6 @@ export type VideoProps = {
     logo: string | null;
   };
   iletisim: Iletisim;
+  /** `public` klasörüne göre fon müziği yolu. Verilmezse müzik çalmaz. */
+  muzik?: string | null | undefined;
 };

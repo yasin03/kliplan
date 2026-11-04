@@ -1,7 +1,7 @@
 import { linearTiming, TransitionSeries } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
 import { Fragment } from "react";
-import { AbsoluteFill } from "remotion";
+import { AbsoluteFill, Audio, interpolate, Sequence, staticFile, useVideoConfig } from "remotion";
 import { Altyazi } from "./bilesenler/Altyazi.js";
 import { Baslik } from "./bilesenler/Baslik.js";
 import { FotografKatmani } from "./bilesenler/FotografKatmani.js";
@@ -57,7 +57,32 @@ const SahneGorunumu: React.FC<SahneProps> = ({ sahne, sira, kapanis, props }) =>
       <div style={{ position: "absolute", bottom: guvenliAlan.alt, left: guvenliAlan.sol, right: guvenliAlan.sagAlt }}>
         <Altyazi metin={sahne.altyazi ?? sahne.disSes} />
       </div>
+
+      {sahne.ses ? (
+        <Sequence from={Math.round(sahne.ses.baslangicSn * tema.video.fps)} layout="none">
+          <Audio src={staticFile(sahne.ses.src)} />
+        </Sequence>
+      ) : null}
     </AbsoluteFill>
+  );
+};
+
+/** Dış sesin altında düşük seviyede; başta açılır, sonda kısılır. */
+const FonMuzigi: React.FC<{ src: string }> = ({ src }) => {
+  const { fps, durationInFrames } = useVideoConfig();
+  const gecis = Math.round(tema.ses.muzikGecisSn * fps);
+  return (
+    <Audio
+      src={staticFile(src)}
+      loop
+      volume={(kare) =>
+        tema.ses.muzikSeviyesi *
+        interpolate(kare, [0, gecis, durationInFrames - gecis, durationInFrames], [0, 1, 1, 0], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        })
+      }
+    />
   );
 };
 
@@ -80,6 +105,7 @@ export const IlanVideosu: React.FC<VideoProps> = (props) => {
           </Fragment>
         ))}
       </TransitionSeries>
+      {props.muzik ? <FonMuzigi src={props.muzik} /> : null}
     </AbsoluteFill>
   );
 };

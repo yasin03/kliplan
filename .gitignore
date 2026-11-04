@@ -2,7 +2,7 @@
 node_modules/
 
 # Ortam değişkenleri (API anahtarları asla commit edilmez)
-.env/
+.env
 .env.*
 .env.example/
 

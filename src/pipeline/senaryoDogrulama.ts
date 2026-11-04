@@ -15,6 +15,7 @@ import {
 export const KELIME_SINIRI = { en_az: 55, en_fazla: 70 } as const;
 export const SAHNE_SINIRI = { en_az: 4, en_fazla: 8 } as const;
 export const BASLIK_EN_FAZLA_KARAKTER = 32;
+export const EKRAN_METNI_EN_FAZLA_KARAKTER = 40;
 
 /** Abartılı veya doğrulanamayan ifadeler. Kök olarak aranır: "fırsat" → "fırsatı", "fırsatlar". */
 export const YASAKLI_IFADELER = [
@@ -253,6 +254,7 @@ export function senaryoyuDogrula(cikti: unknown, baglam: DogrulamaBaglami): Sena
     if (!fotograflar.has(sahne.fotograf)) hatalar.push(`${yer}: "${sahne.fotograf}" fotoğraf listesinde yok.`);
     if (!sahne.baslik.trim()) hatalar.push(`${yer}: başlık boş.`);
     if (!sahne.disSes.trim()) hatalar.push(`${yer}: dış ses metni boş.`);
+    if (!sahne.ekranMetni.trim()) hatalar.push(`${yer}: ekran metni boş.`);
 
     const baslikHatalari = metniDenetle(sahne.baslik, `${yer} başlık`, "baslik", baglam);
     hatalar.push(...baslikHatalari, ...metniDenetle(sahne.disSes, `${yer} dış ses`, "disSes", baglam));
@@ -260,6 +262,20 @@ export function senaryoyuDogrula(cikti: unknown, baglam: DogrulamaBaglami): Sena
       const ekranBasligi = yerTutuculariDoldur(sahne.baslik, tablo, "ekran");
       if ([...ekranBasligi].length > BASLIK_EN_FAZLA_KARAKTER) {
         hatalar.push(`${yer} başlık: en fazla ${BASLIK_EN_FAZLA_KARAKTER} karakter olmalı (şu an ${[...ekranBasligi].length}).`);
+      }
+    }
+
+    // Ekran metninde telefon serbesttir; diğer kurallar başlıkla aynıdır.
+    const ekranHatalari = metniDenetle(sahne.ekranMetni, `${yer} ekran metni`, "baslik", baglam);
+    hatalar.push(...ekranHatalari);
+    if (ekranHatalari.length === 0) {
+      const ekran = yerTutuculariDoldur(sahne.ekranMetni, tablo, "ekran");
+      if ([...ekran].length > EKRAN_METNI_EN_FAZLA_KARAKTER) {
+        hatalar.push(`${yer} ekran metni: en fazla ${EKRAN_METNI_EN_FAZLA_KARAKTER} karakter olmalı (şu an ${[...ekran].length}).`);
+      }
+      const sade = (m: string) => kucult(m).replace(/[^\p{L}\p{N}{}]+/gu, " ").trim();
+      if (sade(sahne.ekranMetni) === sade(sahne.baslik) || sade(sahne.ekranMetni) === sade(sahne.disSes)) {
+        hatalar.push(`${yer} ekran metni: başlığı veya dış sesi tekrar etmemeli; sahnenin öne çıkan bilgisini kısaca özetlemeli.`);
       }
     }
   }

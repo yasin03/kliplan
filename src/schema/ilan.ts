@@ -69,6 +69,15 @@ export const ilanSemasi = z.strictObject({
   ozellikler: z.array(bosOlmayanMetin).default([]),
   kiraDurumu: kiraDurumuSemasi.optional(),
   logo: bosOlmayanMetin.optional(),
+  /** Fon müziği. Yalnızca ticari kullanım izni olan yerel bir dosya; izin bilgisi kontrol raporuna yazılır. */
+  muzik: z
+    .strictObject({
+      dosya: bosOlmayanMetin,
+      lisans: bosOlmayanMetin.describe("Ticari kullanım izninin kaynağı, ör. lisans adı veya satın alma bağlantısı"),
+    })
+    .optional(),
+  /** Bu ilana özel telaffuz sözlüğü; projedeki telaffuz.json ile birleştirilir. */
+  telaffuz: z.record(bosOlmayanMetin, z.union([bosOlmayanMetin, z.strictObject({ ipa: bosOlmayanMetin })])).optional(),
   fotograflar: z.array(fotografSemasi).min(1),
 });
 

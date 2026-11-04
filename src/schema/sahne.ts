@@ -5,7 +5,8 @@ export const sahneSemasi = z.strictObject({
   baslik: z.string().trim().min(1),
   disSes: z.string().trim().min(1),
   altyazi: z.string().trim().min(1).optional(),
-  sureSn: z.number().min(1).max(10),
+  sureSn: z.number().min(1).max(20),
+  ses: z.strictObject({ src: z.string().min(1), baslangicSn: z.number().min(0) }).optional(),
 });
 
 export const sahneListesiSemasi = z.array(sahneSemasi).min(2);

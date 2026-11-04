@@ -22,6 +22,7 @@ export type HazirlikSonucu = {
   publicKlasoru: string;
   fotograflar: Record<string, HazirFotograf>;
   logo: string | null;
+  muzik: string | null;
 };
 
 /**
@@ -59,5 +60,12 @@ export async function fotograflariHazirla(ilanKlasoru: string, ilan: Ilan, publi
     logo = `ilan/${hedefAdi}`;
   }
 
-  return { publicKlasoru, fotograflar, logo };
+  let muzik: string | null = null;
+  if (ilan.muzik) {
+    const hedefAdi = `muzik${path.extname(ilan.muzik.dosya).toLowerCase()}`;
+    await copyFile(path.join(ilanKlasoru, ilan.muzik.dosya), path.join(ilanHedefi, hedefAdi));
+    muzik = `ilan/${hedefAdi}`;
+  }
+
+  return { publicKlasoru, fotograflar, logo, muzik };
 }

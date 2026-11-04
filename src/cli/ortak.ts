@@ -1,8 +1,10 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { ilanKlasorunuDogrula } from "../pipeline/dogrulama.js";
 import { fotograflariHazirla } from "../pipeline/fotografHazirlama.js";
 import { SenaryoHatasi } from "../pipeline/senaryoUretimi.js";
+import { TelaffuzHatasi } from "../pipeline/telaffuz.js";
+import { AdimHatasi } from "../pipeline/uretim.js";
 import { VideoVerisiHatasi, videoPropsOlustur } from "../pipeline/videoProps.js";
 import { SaglayiciHatasi } from "../providers/ScriptProvider.js";
 import type { VideoProps } from "../remotion/tipler.js";
@@ -46,6 +48,14 @@ export async function ornekVideoVerisiHazirla(klasor: string, senaryoYolu?: stri
   const sahneler = await sahneleriOku(senaryoYolu ?? path.join(klasor, "ornek-sahneler.json"));
   const publicKlasoru = path.join(onbellekKlasoru(klasor), "public");
   const hazirlik = await fotograflariHazirla(klasor, ilan, publicKlasoru);
+  for (const [sira, s] of sahneler.entries()) {
+    if (!s.ses) continue;
+    try {
+      await stat(path.join(publicKlasoru, s.ses.src));
+    } catch {
+      throw new KomutHatasi(`Sahne ${sira + 1}: ses dosyası bulunamadı (${s.ses.src}). Önce şunu çalıştırın: npm run ses -- ${klasor}`);
+    }
+  }
   const props: VideoProps = videoPropsOlustur(ilan, sahneler, hazirlik);
   return { ilan, props, publicKlasoru };
 }
@@ -54,11 +64,15 @@ export async function calistir(is: () => Promise<void>) {
   try {
     await is();
   } catch (hata) {
-    if (
+    if (hata instanceof AdimHatasi) {
+      console.error(`✗ Adım ${hata.adim} başarısız:\n  ${hata.message.replace(/\n/g, "\n  ")}`);
+      console.error(`  Çözüm: ${hata.cozum}`);
+    } else if (
       hata instanceof KomutHatasi ||
       hata instanceof VideoVerisiHatasi ||
       hata instanceof SenaryoHatasi ||
-      hata instanceof SaglayiciHatasi
+      hata instanceof SaglayiciHatasi ||
+      hata instanceof TelaffuzHatasi
     ) {
       console.error(`✗ ${hata.message}`);
     } else {

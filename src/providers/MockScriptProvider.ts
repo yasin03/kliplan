@@ -1,4 +1,4 @@
-import { KELIME_SINIRI, kelimeSayisi } from "../pipeline/senaryoDogrulama.js";
+import { EKRAN_METNI_EN_FAZLA_KARAKTER, KELIME_SINIRI, kelimeSayisi } from "../pipeline/senaryoDogrulama.js";
 import type { YzGirdisi } from "../pipeline/senaryoIstemi.js";
 import type { YzSenaryo } from "../schema/senaryo.js";
 import type { SaglayiciYaniti, ScriptProvider, SenaryoIstegi } from "./ScriptProvider.js";
@@ -13,6 +13,18 @@ export function belirtmeHali(ad: string): string {
 }
 
 const kucukBaslat = (metin: string) => metin.charAt(0).toLocaleLowerCase("tr-TR") + metin.slice(1);
+const buyukBaslat = (metin: string) => metin.charAt(0).toLocaleUpperCase("tr-TR") + metin.slice(1);
+
+/** Ekran metni sınırı aşılırsa sondan öğe atılarak kısaltılır; tek öğe bile sığmazsa yedek kullanılır. */
+function ekranMetni(ogeler: string[], yedek: string): string {
+  const liste = ogeler.filter(Boolean).map(buyukBaslat);
+  while (liste.length > 0) {
+    const metin = liste.join(" · ");
+    if ([...metin].length <= EKRAN_METNI_EN_FAZLA_KARAKTER) return metin;
+    liste.pop();
+  }
+  return yedek;
+}
 
 function listele(ogeler: string[]): string {
   const k = ogeler.map(kucukBaslat);
@@ -44,13 +56,22 @@ export function kalipSenaryo(girdi: YzGirdisi): YzSenaryo {
   const yerTutucu = (ad: string) => `{{${ad}}}` in girdi.kullanilabilirYerTutucular;
   const fotolar = girdi.fotograflar;
   const kullanilan = new Set<string>();
-  /** Türleri verilen sırayla dener; hiçbiri kalmadıysa kullanılmamış ilk fotoğrafı alır. */
+  let sonSecilen: string | undefined;
+  /**
+   * Türleri verilen sırayla dener; hiçbiri kalmadıysa kullanılmamış ilk fotoğrafı alır.
+   * Fotoğraflar biterse baştan başlanır, ama aynı fotoğraf art arda gelmez.
+   */
   const sec = (...turler: string[]) => {
+    if (fotolar.every((f) => kullanilan.has(f.dosya))) {
+      kullanilan.clear();
+      if (sonSecilen && fotolar.length > 1) kullanilan.add(sonSecilen);
+    }
     const bulunan =
       turler.map((tur) => fotolar.find((f) => f.tur === tur && !kullanilan.has(f.dosya))).find(Boolean) ??
       fotolar.find((f) => !kullanilan.has(f.dosya));
     const dosya = (bulunan ?? fotolar[0])!.dosya;
     kullanilan.add(dosya);
+    sonSecilen = dosya;
     return dosya;
   };
   const bilgi = (bas: string) => girdi.bina.find((b) => b.startsWith(bas));
@@ -65,46 +86,62 @@ export function kalipSenaryo(girdi: YzGirdisi): YzSenaryo {
     fotograf: sec("bina", "dis_mekan"),
     baslik: sifir ? "Sıfır binada daire" : `${girdi.odaSayisi.charAt(0).toLocaleUpperCase("tr-TR")}${girdi.odaSayisi.slice(1)} daire`,
     disSes: `${yerTutucu("konum") ? "{{konum}} konumunda, " : ""}${sifir ? "yeni yapılmış bir binada " : ""}${girdi.odaSayisi} daire.`,
+    ekranMetni: yerTutucu("konum") ? "{{konum}}" : ekranMetni([girdi.odaSayisi], "Daire"),
   };
   const ic = {
     fotograf: sec("salon"),
     baslik: "Salon",
     disSes: `${bilgi("Daire eşyalı") ? "Daire eşyalı olarak sunuluyor. " : ""}Net kullanım alanı {{netM2}}.`,
+    ekranMetni: `${bilgi("Daire eşyalı") ? "Eşyalı · " : ""}Net {{netM2}}`,
   };
   const ara: YzSenaryo["sahneler"] = [];
   const mutfak = deger("Mutfak:");
-  if (mutfak) ara.push({ fotograf: sec("mutfak"), baslik: "Mutfak", disSes: `Mutfak, ${mutfak} olarak düzenlenmiş.` });
+  if (mutfak) {
+    ara.push({ fotograf: sec("mutfak"), baslik: "Mutfak", disSes: `Mutfak, ${mutfak} olarak düzenlenmiş.`, ekranMetni: ekranMetni([mutfak], "Mutfak düzeni") });
+  }
   const isitma = deger("Isıtma:");
-  if (isitma) ara.push({ fotograf: sec("yatak_odasi", "salon"), baslik: "Isıtma", disSes: `Isıtma, ${isitma} ile sağlanıyor.` });
+  if (isitma) {
+    ara.push({
+      fotograf: sec("yatak_odasi", "salon"),
+      baslik: "Isıtma",
+      disSes: `Isıtma, ${isitma} ile sağlanıyor.`,
+      ekranMetni: ekranMetni([isitma], "Isıtma sistemi"),
+    });
+  }
 
   const kredi = bilgi("Krediye uygun") ? "Daire krediye uygun. " : "";
   const son = {
     fotograf: sec("bina", "dis_mekan", "salon"),
     baslik: yerTutucu("fiyat") ? "Fiyat: {{fiyat}}" : "Bilgi ve randevu",
     disSes: `${yerTutucu("fiyat") ? "Fiyatı {{fiyat}}. " : ""}${kredi}Ayrıntılar için ${belirtmeHali(girdi.emlakOfisi)} arayın.`,
+    ekranMetni: ekranMetni([yerTutucu("fiyat") ? "{{fiyat}}" : "", yerTutucu("telefon") ? "{{telefon}}" : girdi.emlakOfisi], girdi.emlakOfisi),
   };
 
   // Bina bilgisi eklenir, ardından özellikler dörtlü gruplar halinde, toplam kelime
   // alt sınıra ulaşana kadar ayrı sahnelere dağıtılır. Üst sınır hiçbir adımda aşılmaz.
   const ekler: YzSenaryo["sahneler"] = [];
   let toplam = [ilk, ic, ...ara, son].reduce((t, s) => t + kelimeSayisi(s.disSes), 0);
-  const ekle = (baslik: string, disSes: string, ...turler: string[]) => {
-    ekler.push({ fotograf: sec(...turler), baslik, disSes });
+  const ekle = (baslik: string, disSes: string, ekran: string, ...turler: string[]) => {
+    ekler.push({ fotograf: sec(...turler), baslik, disSes, ekranMetni: ekran });
     toplam += kelimeSayisi(disSes);
   };
   const sigar = (metin: string) => toplam + kelimeSayisi(metin) <= KELIME_SINIRI.en_fazla;
 
   const binaBilgisi = [bilgi("Daire,"), bilgi("Tapu:")].filter((b): b is string => Boolean(b)).join(" ");
-  if (binaBilgisi && sigar(binaBilgisi)) ekle("Bina ve tapu", binaBilgisi, "salon", "koridor", "dis_mekan");
+  const tapu = deger("Tapu:");
+  if (binaBilgisi && sigar(binaBilgisi)) {
+    ekle("Bina ve tapu", binaBilgisi, ekranMetni([tapu ? `${tapu} tapu` : ""], "Bina bilgisi"), "salon", "koridor", "dis_mekan");
+  }
   const kalan = [...girdi.ozellikler];
   const cumle = (ogeler: string[], ilkGrup: boolean) =>
     ilkGrup ? `Öne çıkan özellikler arasında ${listele(ogeler)} var.` : `Ayrıca ${listele(ogeler)} bulunuyor.`;
   for (let grup = 0; kalan.length > 0 && toplam < KELIME_SINIRI.en_az && grup < 2; grup++) {
     let adet = Math.min(4, kalan.length);
     while (adet > 1 && !sigar(cumle(kalan.slice(0, adet), grup === 0))) adet--;
-    const metin = cumle(kalan.splice(0, adet), grup === 0);
+    const ogeler = kalan.splice(0, adet);
+    const metin = cumle(ogeler, grup === 0);
     if (!sigar(metin)) break;
-    ekle(grup === 0 ? "Özellikler" : "Diğer özellikler", metin, "koridor", "banyo", "balkon", "salon");
+    ekle(grup === 0 ? "Özellikler" : "Diğer özellikler", metin, ekranMetni(ogeler, "Öne çıkan özellikler"), "koridor", "banyo", "balkon", "salon");
   }
 
   // Bilgi az olduğunda alt sınıra, hiçbir iddia taşımayan nötr cümlelerle ulaşılır.

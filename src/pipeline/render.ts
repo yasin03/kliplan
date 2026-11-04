@@ -6,6 +6,12 @@ import { webpackAyari } from "../remotion/webpack.js";
 
 const GIRIS_NOKTASI = path.resolve(import.meta.dirname, "../remotion/index.ts");
 
+/**
+ * Remotion'ın varsayılan "headless shell" Chrome'u macOS 26'da GPU süreci açılırken çöküyor
+ * ("Target closed", icudtl.dat bulunamadı). Tam Chrome for Testing sorunsuz çalışıyor.
+ */
+const CHROME_MODU = "chrome-for-testing" as const;
+
 type RenderSecenekleri = {
   props: VideoProps;
   publicKlasoru: string;
@@ -28,7 +34,7 @@ export async function videoyuRenderEt(secenekler: RenderSecenekleri): Promise<Re
     onProgress: (yuzde) => ilerleme?.("Paketleme", yuzde / 100),
   });
 
-  const kompozisyon = await selectComposition({ serveUrl, id: KOMPOZISYON_ID, inputProps });
+  const kompozisyon = await selectComposition({ serveUrl, id: KOMPOZISYON_ID, inputProps, chromeMode: CHROME_MODU });
 
   await renderMedia({
     composition: kompozisyon,
@@ -36,11 +42,12 @@ export async function videoyuRenderEt(secenekler: RenderSecenekleri): Promise<Re
     codec: "h264",
     outputLocation: secenekler.videoYolu,
     inputProps,
+    chromeMode: CHROME_MODU,
     onProgress: ({ progress }) => ilerleme?.("Video", progress),
   });
 
   for (const { kare, yol } of secenekler.kareler ?? []) {
-    await renderStill({ composition: kompozisyon, serveUrl, output: yol, frame: kare, inputProps, imageFormat: "jpeg" });
+    await renderStill({ composition: kompozisyon, serveUrl, output: yol, frame: kare, inputProps, imageFormat: "jpeg", chromeMode: CHROME_MODU });
   }
 
   return {

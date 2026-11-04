@@ -10,6 +10,7 @@ export const yzSenaryoSemasi = z.object({
       fotograf: z.string().describe("Sahnede gösterilecek fotoğrafın dosya adı, listeden birebir"),
       baslik: z.string().describe("Ekranda büyük yazılacak kısa başlık"),
       disSes: z.string().describe("Bu sahnede seslendirilecek metin"),
+      ekranMetni: z.string().describe("Altta sahne boyunca sabit duracak, dış sesi tekrar etmeyen kısa metin"),
     }),
   ),
 });

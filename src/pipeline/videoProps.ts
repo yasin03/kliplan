@@ -36,5 +36,6 @@ export function videoPropsOlustur(ilan: Ilan, sahneler: Sahne[], hazirlik: Hazir
     fotograflar: hazirlik.fotograflar,
     ofis: { ad: ilan.emlakOfisi, logo: hazirlik.logo },
     iletisim: iletisimBilgisi(ilan),
+    muzik: hazirlik.muzik,
   };
 }

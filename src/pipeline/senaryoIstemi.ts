@@ -1,6 +1,6 @@
 import type { Ilan } from "../schema/ilan.js";
 import { sayiKelimesi, siraKelimesi } from "./sayilar.js";
-import { BASLIK_EN_FAZLA_KARAKTER, KELIME_SINIRI, SAHNE_SINIRI, YASAKLI_IFADELER } from "./senaryoDogrulama.js";
+import { BASLIK_EN_FAZLA_KARAKTER, EKRAN_METNI_EN_FAZLA_KARAKTER, KELIME_SINIRI, SAHNE_SINIRI, YASAKLI_IFADELER } from "./senaryoDogrulama.js";
 import type { YerTutucu, YerTutucuDegeri } from "./yerTutucu.js";
 
 /**
@@ -21,7 +21,7 @@ const YER_TUTUCU_ACIKLAMALARI: Record<YerTutucu, string> = {
   fiyat: "satış fiyatı",
   netM2: "net kullanım alanı",
   konum: "mahalle, ilçe ve il",
-  telefon: "telefon numarası (yalnızca başlıkta; dış seste kullanılamaz)",
+  telefon: "telefon numarası (yalnızca başlıkta ve ekran metninde; dış seste kullanılamaz)",
 };
 
 export function yzGirdisiOlustur(ilan: Ilan, tablo: Partial<Record<YerTutucu, YerTutucuDegeri>>): YzGirdisi {
@@ -53,19 +53,20 @@ export function yzGirdisiOlustur(ilan: Ilan, tablo: Partial<Record<YerTutucu, Ye
 
 export const SISTEM_METNI = `Bir emlak ofisi adına, sosyal medyada paylaşılacak 20-30 saniyelik dikey bir ilan videosunun sahnelerini yazıyorsun. Videoyu izleyen kişi daireyle ilgilenebilecek biri; metin ona güvenilir bir danışman gibi, sade ve doğal Türkçeyle bilgi vermeli. Satış sloganı gibi değil, bilgi veren bir tonda yaz.
 
-Her sahne bir fotoğraf, ekranda büyük yazılan kısa bir başlık ve seslendirilecek bir dış ses cümlesinden oluşur.
+Her sahne bir fotoğraf, üstte büyük yazılan kısa bir başlık, seslendirilecek bir dış ses cümlesi ve altta sahne boyunca sabit duran kısa bir ekran metninden oluşur. Ekran metni sesi yazıya dökmez; sesi kapalı izleyen kişiye sahnenin öne çıkan bilgisini birkaç kelimeyle verir.
 
 İçerik kuralları:
 - Yalnızca sana verilen bilgileri kullan. Verilmeyen hiçbir özelliği, mesafeyi, çevre bilgisini veya niteliği (geniş, ferah, aydınlık gibi) yazma; bunları kod tarafında doğrulayamıyoruz.
 - Abartılı veya doğrulanamayan ifadeler kullanma: ${YASAKLI_IFADELER.slice(0, 16).join(", ")} ve benzerleri.
 - Hiç rakam kullanma. Oda ve kat gibi sayıları sana verildiği gibi yazıyla yaz.
 - Fiyat, telefon, metrekare ve konumu asla kendin yazma; yalnızca listede verilen yer tutucuları birebir kullan. Yer tutucuya ek getirme ("{{konum}}'da" değil, "{{konum}} konumunda"; "{{fiyat}}'a" değil, "fiyatı {{fiyat}}").
-- {{telefon}} dış seste kullanılmaz. İletişim için son sahnenin dış sesinde emlak ofisinin adıyla aranmasını iste (ör. "Ayrıntılar için <ofis adı>'nı arayın").
+- {{telefon}} dış seste kullanılmaz; başlıkta ve ekran metninde kullanılabilir. İletişim için son sahnenin dış sesinde emlak ofisinin adıyla aranmasını iste (ör. "Ayrıntılar için <ofis adı>'nı arayın").
 
 Yapı kuralları:
 - ${SAHNE_SINIRI.en_az}-${SAHNE_SINIRI.en_fazla} sahne. Tüm dış seslerin toplamı ${KELIME_SINIRI.en_az}-${KELIME_SINIRI.en_fazla} kelime (yer tutucular bir kelime sayılır). Bir sahnenin dış sesi bir, en fazla iki kısa cümle olsun.
 - İlk cümle dikkat çekici ama abartısız olsun; dairenin en belirgin gerçek özelliğiyle başla.
 - Başlıklar en fazla ${BASLIK_EN_FAZLA_KARAKTER} karakter, iki-dört kelime.
+- Ekran metni (ekranMetni) en fazla ${EKRAN_METNI_EN_FAZLA_KARAKTER} karakter, iki-altı kelime. Başlığı tekrar etmesin, dış sesi kelimesi kelimesine yazmasın; birden çok bilgiyi " · " ile ayırabilirsin (ör. "Ankastre set · Bulaşık makinesi"). Aynı içerik kuralları burada da geçerli.
 - Her sahneye içeriğine uygun türde bir fotoğraf seç; dosya adını listeden birebir yaz. Aynı fotoğrafı art arda kullanma.
 - Son sahnede fiyatı {{fiyat}} ile ver ve iletişim için ofisin aranmasını iste.`;
 

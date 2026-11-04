@@ -2,6 +2,7 @@ import { mkdtemp, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
+import type { GoogleGenAI } from "@google/genai";
 import { describe, expect, it } from "vitest";
 import { toplamKareSayisi } from "../src/remotion/hesap.js";
 import { tema } from "../src/remotion/tema.js";
@@ -9,6 +10,7 @@ import { SenaryoHatasi, senaryoUret, sureleriTahminEt } from "../src/pipeline/se
 import { yzGirdisiOlustur } from "../src/pipeline/senaryoIstemi.js";
 import { yerTutucuTablosu } from "../src/pipeline/yerTutucu.js";
 import { AnthropicScriptProvider } from "../src/providers/AnthropicScriptProvider.js";
+import { GeminiScriptProvider } from "../src/providers/GeminiScriptProvider.js";
 import { belirtmeHali, kalipSenaryo, MockScriptProvider } from "../src/providers/MockScriptProvider.js";
 import { SaglayiciHatasi, type ScriptProvider } from "../src/providers/ScriptProvider.js";
 import { type Ilan, ilanSemasi } from "../src/schema/ilan.js";
@@ -16,7 +18,7 @@ import { temurlarVerisi } from "./yardimci.js";
 
 const temurlar = (): Ilan => ilanSemasi.parse(temurlarVerisi());
 const gecerli = (ilan = temurlar()) => kalipSenaryo(yzGirdisiOlustur(ilan, yerTutucuTablosu(ilan)));
-const hatali = () => ({ sahneler: [{ fotograf: "01-bina.png", baslik: "Fırsat", disSes: "Kaçırılmaz fırsat, 4 milyon." }] });
+const hatali = () => ({ sahneler: [{ fotograf: "01-bina.png", baslik: "Fırsat", disSes: "Kaçırılmaz fırsat, 4 milyon.", ekranMetni: "Fırsat" }] });
 const geciciKlasor = () => mkdtemp(path.join(tmpdir(), "kliplan-senaryo-"));
 
 describe("senaryo üretimi", () => {
@@ -209,5 +211,54 @@ describe("Anthropic sağlayıcısı", () => {
     }).senaryoUret(istek());
     expect(cagrilar[0]).not.toHaveProperty("fallbacks");
     expect(cagrilar[0]).not.toHaveProperty("betas");
+  });
+});
+
+describe("Gemini sağlayıcısı", () => {
+  type Params = Record<string, unknown>;
+  const sahteIstemci = (yanit: Record<string, unknown>, cagrilar: Params[] = []) => ({
+    models: {
+      generateContent: (params: Params) => {
+        cagrilar.push(params);
+        return Promise.resolve(yanit);
+      },
+    },
+  }) as unknown as GoogleGenAI;
+
+  const temelYanit = (metin: string, finishReason = "STOP") => ({
+    text: metin,
+    candidates: [{ finishReason }],
+    usageMetadata: { promptTokenCount: 1000, candidatesTokenCount: 1500, thoughtsTokenCount: 500 },
+  });
+
+  const istek = () => {
+    const ilan = temurlar();
+    return { sistem: "s", kullanici: "k", girdi: yzGirdisiOlustur(ilan, yerTutucuTablosu(ilan)) };
+  };
+
+  it("modeli, düşünme seviyesini ve JSON şemasını gönderiyor; çıktıyı ayrıştırıyor", async () => {
+    const cagrilar: Params[] = [];
+    const saglayici: ScriptProvider = new GeminiScriptProvider({
+      istemci: sahteIstemci(temelYanit('{"sahneler":[]}'), cagrilar),
+    });
+    const yanit = await saglayici.senaryoUret(istek());
+    expect(cagrilar[0]).toMatchObject({
+      model: "gemini-3.8-flash",
+      config: { systemInstruction: "s", responseMimeType: "application/json", thinkingConfig: { thinkingLevel: "MEDIUM" } },
+    });
+    expect((cagrilar[0]!.config as Params).responseJsonSchema).toMatchObject({ type: "object", required: ["sahneler"] });
+    expect(yanit.cikti).toEqual({ sahneler: [] });
+    expect(yanit.kullanim).toEqual({ girdiToken: 1000, ciktiToken: 2000, tahminiMaliyetUsd: 0 });
+    expect(saglayici.kimlik).toBe("gemini:gemini-3.8-flash:medium");
+  });
+
+  it("ayrıştırılamayan çıktıyı ham metin olarak doğrulamaya iletiyor", async () => {
+    const saglayici = new GeminiScriptProvider({ istemci: sahteIstemci(temelYanit("bozuk")) });
+    expect((await saglayici.senaryoUret(istek())).cikti).toBe("bozuk");
+  });
+
+  it("güvenlik nedeniyle kesilen yanıtı Türkçe hata olarak bildiriyor", async () => {
+    const saglayici = new GeminiScriptProvider({ istemci: sahteIstemci(temelYanit("", "SAFETY")) });
+    await expect(saglayici.senaryoUret(istek())).rejects.toThrow(SaglayiciHatasi);
   });
 });
