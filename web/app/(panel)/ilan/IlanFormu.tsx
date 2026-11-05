@@ -64,7 +64,7 @@ export function IlanFormu({ ilanId, baslangic, ofisAdi, ofisler }: Props) {
         </datalist>
       </Bolum>
 
-      <Bolum baslik="Fiyat ve konum" aciklama="İşaretlemediğiniz bilgi videoda gösterilmez.">
+      <Bolum baslik="Fiyat ve konum" aciklama="Video üretmek için fiyat doğrulanmış olmalı. Konumu işaretlemezseniz videoda gösterilmez.">
         <Izgara>
           <MetinAlani ad="fiyatTl.deger" etiket="Fiyat (TL)" d={d} h={h} sayisal yerTutucu="4.500.000" />
           <OnayKutusu ad="fiyatTl.onayli" d={d} />
@@ -79,7 +79,7 @@ export function IlanFormu({ ilanId, baslangic, ofisAdi, ofisler }: Props) {
 
       <Bolum
         baslik="İletişim"
-        aciklama={`Videonun sonunda gösterilir.${ofisAdi ? ` Ofis adı: ${ofisAdi}.` : ""} İşaretlemediğiniz bilgi videoda gösterilmez.`}
+        aciklama={`Videonun sonunda gösterilir; video üretmek için ikisi de doğrulanmış olmalı.${ofisAdi ? ` Ofis adı: ${ofisAdi}.` : ""}`}
       >
         <Izgara>
           <MetinAlani ad="telefon.deger" etiket="Telefon" d={d} h={h} tur="tel" yerTutucu="0505 709 44 88" />

@@ -94,6 +94,17 @@ describe("senaryo doğrulaması", () => {
     expect(h).toContain('"Temurlar Grup" adı geçmeli');
   });
 
+  it("rakam içeren ofis adını rakam sayımıyor, ofis adı dışındaki rakamı yine yakalıyor", () => {
+    const ilan = { ...temurlar(), emlakOfisi: "Emlak 360" };
+    const senaryo = bozulmus((s) => {
+      for (const sahne of s.sahneler) sahne.disSes = sahne.disSes.replaceAll("Temurlar Grup", "Emlak 360");
+      for (const sahne of s.sahneler) sahne.ekranMetni = sahne.ekranMetni.replaceAll("Temurlar Grup", "Emlak 360");
+    });
+    expect(hatalar(senaryo, baglam(ilan))).toEqual([]);
+    senaryo.sahneler[0]!.disSes += " 3 dakika uzaklıkta.";
+    expect(hatalar(senaryo, baglam(ilan)).join("\n")).toContain("Sahne 1 dış ses: rakam kullanılamaz (3)");
+  });
+
   it("ekran metnini başlıkla aynı kurallarla denetliyor; uzunluk ve tekrar sınırı var", () => {
     const h = hatalar(
       bozulmus((s) => {

@@ -15,6 +15,20 @@
       "when": 1793865935138,
       "tag": "0001_fotograf_boyutlari",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793870390647,
+      "tag": "0002_is_ilerlemesi",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793873062393,
+      "tag": "0003_video_test",
+      "breakpoints": true
     }
   ]
 }

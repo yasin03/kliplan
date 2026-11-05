@@ -2,8 +2,15 @@
 
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
+import { kontrolMaddeleri } from "@cekirdek/pipeline/kontrolListesi.js";
+import { duzenlenenSenaryo, SenaryoHatasi, type SenaryoSonucu } from "@cekirdek/pipeline/senaryoUretimi.js";
+import { iletisimBilgisi } from "@cekirdek/pipeline/videoProps.js";
+import { DuzenlemeHatasi } from "@cekirdek/veri/depo.js";
 import { type AlanHatalari, type FormAlanlari, fotografTuruMu, ilanFormunuDogrula } from "@cekirdek/veri/ilanFormu.js";
+import { type IsTuru, isEkle } from "@cekirdek/worker/kuyruk.js";
 import { kullaniciMesaji } from "@/lib/hatalar";
+import { ilanBaglami } from "@/lib/ilanBaglami";
+import { kuyruk } from "@/lib/kuyruk";
 import { girisGerekli } from "@/lib/oturum";
 
 export type FormDurumu = { hatalar: AlanHatalari; mesaj: string | null; degerler: FormAlanlari };
@@ -77,4 +84,77 @@ export async function fotografSil(fotografId: string): Promise<EylemSonucu> {
 export async function fotograflariSirala(ilanId: string, siralama: string[]): Promise<EylemSonucu> {
   const { depo } = await girisGerekli();
   return eylem(() => depo.fotograflariSirala(ilanId, siralama));
+}
+
+/** Redis kapalıyken bağlantı sonsuza kadar yeniden denenir; kullanıcı beklemesin diye süre sınırı. */
+const KUYRUK_SURESI_MS = 5000;
+
+/** Senaryo veya video işini başlatır. `zorla`: önbelleği yok sayıp yapay zekaya yeni senaryo yazdırır (ücretli). */
+export async function uretimBaslat(ilanId: string, tur: IsTuru, zorla = false): Promise<EylemSonucu> {
+  const { depo } = await girisGerekli();
+  if (tur !== "senaryo" && tur !== "video") return { hata: "Geçersiz iş türü." };
+  return eylem(async () => {
+    const { json } = await ilanBaglami(depo, ilanId);
+    if (!json.basarili) throw new DuzenlemeHatasi(`Önce şunları tamamlayın: ${json.hatalar.join(" ")}`);
+
+    const is = await depo.uretimBaslat(ilanId, tur, zorla === true);
+    let sayac: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        isEkle(kuyruk(), is.id, tur),
+        new Promise((_, reddet) => {
+          sayac = setTimeout(() => reddet(new Error("Kuyruğa ulaşılamadı (zaman aşımı).")), KUYRUK_SURESI_MS);
+        }),
+      ]);
+    } catch (hata) {
+      console.error("İş kuyruğa eklenemedi:", hata);
+      const cozum = "Biraz sonra yeniden deneyin. Sürerse yöneticiye haber verin.";
+      await depo.isBasarisiz(is.id, { adim: "Kuyruk", mesaj: "İş kuyruğa eklenemedi.", cozum });
+      throw new DuzenlemeHatasi(`İş başlatılamadı. ${cozum}`);
+    } finally {
+      clearTimeout(sayac);
+    }
+  });
+}
+
+/** Son başarısız işi aynı türle yeniden kuyruğa koyar. Tamamlanan adımlar önbellekten gelir. */
+export async function yenidenDene(ilanId: string): Promise<EylemSonucu> {
+  const { depo } = await girisGerekli();
+  const son = await depo.sonIs(ilanId);
+  if (!son) return { hata: "Yeniden denenecek iş yok." };
+  return uretimBaslat(ilanId, son.tur);
+}
+
+export type SenaryoKaydiSonucu = { hatalar: string[] };
+
+/** Düzenlenen senaryo, yapay zeka çıktısıyla aynı kurallardan geçmezse kaydedilmez. */
+export async function senaryoKaydet(ilanId: string, yeni: unknown): Promise<SenaryoKaydiSonucu> {
+  const { depo } = await girisGerekli();
+  try {
+    const { ilan, json } = await ilanBaglami(depo, ilanId);
+    if (!json.basarili) return { hatalar: json.hatalar };
+    if (!ilan.senaryo) return { hatalar: ["Bu ilan için kayıtlı senaryo yok. Önce senaryoyu üretin."] };
+    await depo.senaryoKaydet(ilanId, duzenlenenSenaryo(ilan.senaryo as SenaryoSonucu, json.ilan, yeni));
+  } catch (hata) {
+    if (hata instanceof SenaryoHatasi) return { hatalar: hata.hatalar };
+    const mesaj = kullaniciMesaji(hata);
+    if (!mesaj) throw hata;
+    return { hatalar: [mesaj] };
+  }
+  refresh();
+  return { hatalar: [] };
+}
+
+/** Kontrol listesinin bütün maddeleri işaretlenmeden onay verilmez; maddeler sunucuda yeniden hesaplanır. */
+export async function videoOnayla(ilanId: string, videoId: string, isaretlenenler: string[]): Promise<EylemSonucu> {
+  const { depo } = await girisGerekli();
+  return eylem(async () => {
+    const { json } = await ilanBaglami(depo, ilanId);
+    if (!json.basarili) throw new DuzenlemeHatasi(`İlan bilgileri eksik: ${json.hatalar.join(" ")}`);
+    if (!(await depo.videolar(ilanId)).some((v) => v.id === videoId)) throw new DuzenlemeHatasi("Video bu ilana ait değil.");
+    const maddeler = kontrolMaddeleri(json.ilan, iletisimBilgisi(json.ilan));
+    const eksik = maddeler.filter((m) => !isaretlenenler.includes(m.kod));
+    if (eksik.length) throw new DuzenlemeHatasi(`Onaylamak için bütün maddeleri işaretleyin (${eksik.length} madde eksik).`);
+    await depo.videoOnayla(videoId, maddeler.map((m) => m.metin));
+  });
 }

@@ -201,7 +201,18 @@ export function ilanJsonuOlustur(
     { ...veri, emlakOfisi: ofis.ad, fotograflar: fotograflar.map((f) => ({ dosya: f.dosyaAdi, tur: f.tur })) },
     { error: turkceHataHaritasi },
   );
-  if (sonuc.success) return { basarili: true, ilan: sonuc.data };
+  if (sonuc.success) {
+    // Kapanış kartı bu üç bilgiyle kurulur (`iletisimBilgisi`); onaysızsa video üretilemez.
+    const { fiyatTl, telefon, yetkiBelgeNo } = sonuc.data;
+    const onaysiz = [!fiyatTl.onayli && "fiyat", !telefon.onayli && "telefon", !yetkiBelgeNo.onayli && "yetki belge numarası"].filter(Boolean);
+    if (onaysiz.length) {
+      return {
+        basarili: false,
+        hatalar: [`Videonun kapanışında gösterilen ${onaysiz.join(", ")} doğrulanmalı: Bilgiler'de "Bu bilgiyi doğruladım" kutusunu işaretleyin.`],
+      };
+    }
+    return { basarili: true, ilan: sonuc.data };
+  }
   const hatalar = sonuc.error.issues.map((sorun) =>
     sorun.path[0] === "fotograflar" && sorun.code === "too_small" ? "En az bir fotoğraf yükleyin." : `${alanYolu(sorun.path, "İlan")}: ${sorun.message}`,
   );

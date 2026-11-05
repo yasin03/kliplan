@@ -1,3 +1,4 @@
+import { kontrolMaddeleri } from "./kontrolListesi.js";
 import type { Iletisim, Sahne } from "../remotion/tipler.js";
 import type { Ilan } from "../schema/ilan.js";
 import type { RaporMaddesi } from "./kontrolRaporu.js";
@@ -92,14 +93,8 @@ export function uretimRaporu(v: UretimRaporuVerisi): string {
     "",
     "## Göndermeden önce kontrol listesi",
     "",
-    `- [ ] Fiyat, telefon ve yetki belge numarası emlakçının verdiğiyle aynı (${v.iletisim.fiyat}, ${v.iletisim.telefon}, ${v.iletisim.yetkiBelgeNo}).`,
-    "- [ ] Dış seste ilanda olmayan veya abartılı bir ifade yok.",
-    "- [ ] Ofis, mahalle ve marka adları doğru okunuyor (yanlışsa `telaffuz.json`).",
-    "- [ ] Ses sonuna kadar duyuluyor, sahne değişirken kesilmiyor.",
-    "- [ ] Fotoğraflar doğru ilana ait, bulanık veya kötü kırpılmış değil.",
-    "- [ ] Yukarıdaki uyarıların hepsi gözden geçirildi.",
+    ...kontrolMaddeleri(v.ilan, v.iletisim).map((m) => `- [ ] ${hucre(m.cliNotu ? `${m.metin.replace(/\.$/, "")} (${m.cliNotu}).` : m.metin)}`),
+    "",
   );
-  if (ilan.muzik) ekle(`- [ ] Müziğin ticari kullanım izni doğrulandı (${hucre(ilan.muzik.lisans)}).`);
-  ekle("- [ ] Video emlakçıya gönderilmeden önce baştan sona izlendi.", "");
   return satirlar.join("\n");
 }

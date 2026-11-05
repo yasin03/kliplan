@@ -2,7 +2,7 @@
 
 Kliplan, emlak ilanı bilgilerinden (`ilan.json`) ve yerel fotoğraflardan 20-30 saniyelik dikey tanıtım videosu (MP4) üretir.
 
-> Durum: **Faz 6 (web uygulaması) başladı.** Plan ve barındırma kararları: `docs/faz6-plan.md`. Tamamlanan adımlar: 6.1 çekirdek ayrımı, 6.2 altyapı ve giriş, 6.3 müşteri ayrımı, 6.4 ilan formu ve fotoğraf yükleme.
+> Durum: **Faz 6 (web uygulaması) başladı.** Plan ve barındırma kararları: `docs/faz6-plan.md`. Tamamlanan adımlar: 6.1 çekirdek ayrımı, 6.2 altyapı ve giriş, 6.3 müşteri ayrımı, 6.4 ilan formu ve fotoğraf yükleme, 6.5 kuyruk ve worker, 6.6 önizleme, onay ve indirme.
 
 ## Gereksinimler
 
@@ -293,6 +293,70 @@ Panelde akış: **İlanlar → Yeni ilan → Bilgiler → Fotoğraflar → İlan
   - Sıralama oklarla yapılıyor. Sürükleyerek sıralama, telefonda da çalışması için ek kütüphane gerektirdiği için eklenmedi.
 - **Veritabanı:** `fotograf` tablosuna `genislik` ve `yukseklik` eklendi (migration `0001`). Uygulamak için: `npm run db:uygula`.
 - **Testler:** Form dönüşümü ve doğrulaması ([tests/ilanFormu.test.ts](tests/ilanFormu.test.ts)), fotoğraf işleme ve EXIF silme ([tests/fotografIsleme.test.ts](tests/fotografIsleme.test.ts)), başka ofisin fotoğrafını değiştirme, silme ve sıralama denemeleri ([tests/erisim.test.ts](tests/erisim.test.ts)).
+
+### 6.5 Kuyruk, worker ve senaryo düzenleme
+
+Panelde akış: **Bilgiler → Fotoğraflar → Senaryoyu üret → senaryoyu kontrol et/düzenle → Videoyu üret**. Üretim arka planda sürer; sayfa birkaç saniyede bir kendini yeniler.
+
+**Çalıştırma** (web panelinin yanında ikinci bir terminalde):
+
+```bash
+npm run worker            # gerçek sağlayıcılar (.env'deki Gemini/Azure)
+npm run worker -- --mock  # API kullanmadan test üretimi; raporda "TEST ÜRETİMİ" yazar
+```
+
+- **Kuyruk** ([src/worker/kuyruk.ts](src/worker/kuyruk.ts)): BullMQ 6.4.2 + ioredis 6.0.0.
+  - BullMQ 6 Redis istemcisini kendisi getirmiyor. ESM projelerde bağlantı ayarından istemci kuramadığı için hazır bir ioredis istemcisi veriliyor.
+  - İş verisi yalnızca `uretim_isi` kaydının kimliği; ilan her seferinde veritabanından okunur. Kuyruktaki iş kimliği de aynı, bu yüzden aynı iş iki kez eklenemez.
+  - Aynı ilanda aynı anda tek iş çalışabilir. Kilit tek sorguda alınır; iki sekmeden aynı anda basılsa da tek iş açılır.
+  - Otomatik yeniden deneme yok. Hata panelde gösterilir, kullanıcı "Yeniden dene"ye basar. Tamamlanan adımlar önbellekten gelir, tekrar ücret oluşmaz.
+  - Redis'e 5 saniyede ulaşılamazsa iş hata olarak kapatılır ve kullanıcıya söylenir; sayfa takılmaz.
+- **Worker** ([src/worker/isler.ts](src/worker/isler.ts)): Aynı anda tek iş çalıştırır (render CPU'yu dolduruyor).
+  - İlanı ve fotoğrafları geçici bir klasöre `ilan.json` + `fotograflar/` olarak yazar ve mevcut pipeline fonksiyonlarını o klasörle çalıştırır (6.1'deki `ilanHazirla`, `senaryoAsamasi`, `videoAsamasi`).
+  - Senaryo/ses önbelleği `.cache/web/<ilanId>/` altında.
+  - **Senaryo işi** senaryoyu ilana yazar, ilan taslakta kalır.
+  - **Video işi** çıktıları `ofis/<ofisId>/ilan/<ilanId>/video/<sürüm>/` altına yükler (video, kapak, rapor, senaryo.json). Her üretim yeni bir sürüm açar ve ilan "kontrol bekliyor" olur.
+  - Worker çöküp iş yarıda kalırsa BullMQ işi başarısız sayar; worker bunu da hata olarak kaydeder.
+- **Durumlar:** Senaryo ve video üretilirken ilan "üretiliyor" durumundadır. Bu sırada bilgiler, fotoğraflar ve senaryo değiştirilemez, ilan silinemez. Plan senaryo üretimini "taslak içinde" sayıyordu. Üretim sürerken bilgilerin değişip senaryonun eskimesini önlemek için iki iş de bu kilidi kullanıyor.
+- **Hata gösterimi:** Panelde adım ("3/6 Senaryo"), ne yapılacağı ve açılır "Ayrıntı" içinde teknik mesaj gösterilir. Pipeline'ın kendi çözüm metinleri CLI içindir (".env", "--mock"); panelde emlakçıya uygun metinler kullanılır.
+- **Senaryo düzenleme** (`/ilan/<id>/senaryo`): Her sahnenin fotoğrafı, başlığı, dış sesi ve ekran metni düzenlenebilir.
+  - Kurallar yazarken canlı kontrol edilir (rakam, abartılı ifade, konum adı, onaysız bilgi, uzunluk, toplam 55-70 kelime). Kaydederken sunucu `duzenlenenSenaryo` ile aynı kontrolü tekrar yapar.
+  - Kritik bilgiler `{{fiyat}}` gibi yer tutucularla kalır; ekranda değerleri ve okunuşları önizlenir.
+  - Kaydedilen senaryo video işinde bir kez daha doğrulanır.
+  - Senaryo değişince ilan taslağa döner; eski video yeni sürümle değiştirilmelidir.
+  - "Yeni senaryo yazdır" önbelleği yok sayar ve yapay zekaya yeniden yazdırır (ücretli; onay sorar).
+- **Düzeltme:** Rakam içeren ofis adları ("Emlak 360") senaryo kuralına takılıyordu. Son sahnede ofis adı zorunlu olduğu için bu ofisler hiç video üretemezdi. Ofis adı rakam kontrolünden muaf tutuldu ([src/pipeline/senaryoDogrulama.ts](src/pipeline/senaryoDogrulama.ts)).
+- **Veritabanı:** `uretim_isi` tablosuna `asama`, `ilerleme` ve `zorla` eklendi (migration `0002`). Uygulamak için: `npm run db:uygula`.
+- **Testler** ([tests/worker.test.ts](tests/worker.test.ts)):
+  - Senaryo ve video işleri, sürümler, depoya yükleme.
+  - Çift başlatma kilidi ve başka ofisin ilanında iş başlatma.
+  - Doğrulama ve render hatalarının kaydı.
+  - Tekrar denemede sesin önbellekten gelmesi.
+  - Kurala aykırı kayıtlı senaryonun reddedilmesi.
+
+### 6.6 Önizleme, onay ve indirme
+
+İlan sayfasında son video sürümü oynatılır. Altında kontrol listesi, indirme bağlantıları ve önceki sürümler bulunur.
+
+- **Kontrol listesi** ([src/pipeline/kontrolListesi.ts](src/pipeline/kontrolListesi.ts)): CLI'daki kontrol raporu ve paneldeki onay ekranı aynı maddeleri kullanır. Maddeler fiyat, telefon ve yetki belgesinin doğruluğu, ifadeler, okunuş, ses, fotoğraflar ve uyarılardır; müzik varsa lisans maddesi eklenir. Son madde "baştan sona izlendi".
+- **Onay** (`videoOnayla`): Bütün maddeler işaretlenmeden onaylanamaz. Maddeler sunucuda ilanın güncel bilgilerinden yeniden hesaplanır.
+  - Yalnızca en son sürüm ve ilan "kontrol bekliyor" durumundayken onaylanabilir.
+  - Onaylayan kullanıcı, zaman ve işaretlenen maddelerin metni `video` kaydında saklanır.
+  - Onaydan sonra bilgi, fotoğraf veya senaryo değişirse ilan taslağa döner; panel onaylı videonun eski bilgilerle üretildiğini söyler.
+- **Test üretimi onaylanamaz.** Sahte sağlayıcıyla üretilen video `video.test` ile işaretlenir; kaynağı `--mock` veya `.env`'de `SCRIPT_PROVIDER=mock`/`TTS_PROVIDER=mock` olabilir. Daha önce yalnızca `--mock` bayrağı test sayılıyordu; `.env`'de mock seçiliyse CLI raporuna da "TEST ÜRETİMİ" yazılmıyordu, bu da düzeltildi.
+- **İndirme:** Video ve kapak yalnızca onaydan sonra indirilebilir; kontrol raporu her zaman.
+  - İndirme bağlantıları dosyayı `kliplan-video-s<sürüm>.mp4` gibi bir adla indirir. Ad imzaya dahil, değiştirilirse bağlantı 403 verir.
+  - Önizleme bağlantısından dosya yine kaydedilebilir. Bu kural bir güvenlik önlemi değil; onaysız videonun yanlışlıkla gönderilmesini önlemek için.
+- **Yeniden üretme:** "Videoyu yeniden üret" yeni bir sürüm açar ve ilanı tekrar "kontrol bekliyor" yapar. Eski sürümler listede kalır.
+- **Kapanış kartı bilgileri:** Fiyat, telefon ve yetki belgesi doğrulanmadan senaryo ve video üretimi başlamaz. Bu bilgiler kapanış kartında gösteriliyor. Daha önce bu durum ancak worker'da, CLI diliyle bir hata olarak çıkıyordu.
+- **Video oynatma (yerel):** `/dosya/...` yolu `Range` isteklerini destekliyor (206), çünkü Safari videoyu parça parça ister.
+  - Next.js geliştirme sunucusu yanıttan `Content-Length`'i kaldırıp chunked gönderiyor. Safari'de yerel oynatma denenmedi.
+  - Yerel depoda her parça isteği dosyanın tamamını okur; sunucuda R2'nin kendi bağlantıları kullanılacak.
+- **Geliştirme notu:** Web sunucusu veritabanı bağlantısını tek örnek tutuyor. `src/db/sema.ts` değişince `npm run web`'i yeniden başlatın, yoksa yeni sütunlar görünmez.
+- **Veritabanı:** `video.test` eklendi (migration `0003`). Uygulamak için: `npm run db:uygula`.
+- **Testler:**
+  - Onay, eksik madde, eski sürüm, test videosu ve başka ofis denemeleri; bilgiler değişince onayın engellenmesi; yeniden üretim ([tests/worker.test.ts](tests/worker.test.ts)).
+  - İndirme adının imzası ve `Range` çözümü ([tests/depolama.test.ts](tests/depolama.test.ts)).
 
 ## Lisans ve ses aracı
 

@@ -2,7 +2,7 @@ import { mkdtemp, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { anahtariDogrula, DepolamaHatasi, imzaGecerliMi, imzala } from "../src/depolama/Depolama.js";
+import { anahtariDogrula, aralikCoz, DepolamaHatasi, imzaGecerliMi, imzala } from "../src/depolama/Depolama.js";
 import { YerelDepolama } from "../src/depolama/YerelDepolama.js";
 
 const GIZLI = "test-gizli-anahtar";
@@ -59,5 +59,33 @@ describe("yerel depolama", () => {
 
   it("imza anahtarı olmadan kurulmuyor", () => {
     expect(() => new YerelDepolama("/tmp", "")).toThrow(DepolamaHatasi);
+  });
+});
+
+describe("indirme bağlantısı ve aralık", () => {
+  it("indirme adı imzaya giriyor; ad değiştirilirse bağlantı geçersiz", async () => {
+    const son = Date.now() + 60_000;
+    const imza = imzala(ANAHTAR, son, GIZLI, "kliplan-video-s1.mp4");
+    expect(imzaGecerliMi(ANAHTAR, son, imza, GIZLI, Date.now(), "kliplan-video-s1.mp4")).toBe(true);
+    expect(imzaGecerliMi(ANAHTAR, son, imza, GIZLI, Date.now(), "baska.mp4")).toBe(false);
+    expect(imzaGecerliMi(ANAHTAR, son, imza, GIZLI)).toBe(false);
+
+    const depolama = new YerelDepolama("/tmp/yok", GIZLI);
+    await expect(depolama.imzaliBaglanti(ANAHTAR, 60, 'kötü"ad.mp4')).rejects.toThrow("Geçersiz indirme adı");
+    await expect(depolama.imzaliBaglanti(ANAHTAR, 60, "kliplan-video-s1.mp4")).resolves.toMatch(/&indir=kliplan-video-s1\.mp4$/);
+  });
+
+  it.each([
+    [null, null],
+    ["bytes=0-", { bas: 0, son: 999 }],
+    ["bytes=0-1", { bas: 0, son: 1 }],
+    ["bytes=500-2000", { bas: 500, son: 999 }],
+    ["bytes=-100", { bas: 900, son: 999 }],
+    ["bytes=1000-", "gecersiz"],
+    ["bytes=5-2", "gecersiz"],
+    ["bytes=0-1,5-6", "gecersiz"],
+    ["items=0-1", "gecersiz"],
+  ] as const)("Range %s → %j", (baslik, beklenen) => {
+    expect(aralikCoz(baslik, 1000)).toEqual(beklenen);
   });
 });

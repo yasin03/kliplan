@@ -121,6 +121,13 @@ describe("ilan.json oluşturma", () => {
     ]);
   });
 
+  it("kapanış kartındaki bilgiler onaysızsa üretime izin vermiyor", () => {
+    const onaysiz = { ...veri, telefon: { ...veri.telefon, onayli: false }, yetkiBelgeNo: { ...veri.yetkiBelgeNo, onayli: false } };
+    const sonuc = ilanJsonuOlustur(onaysiz, { ad: "Temurlar Grup" }, [{ dosyaAdi: "a.jpg", tur: "bina" }]);
+    expect(sonuc.basarili).toBe(false);
+    expect(!sonuc.basarili && sonuc.hatalar[0]).toContain("telefon, yetki belge numarası doğrulanmalı");
+  });
+
   it("fotoğraf yoksa ne yapılacağını söylüyor", () => {
     expect(ilanJsonuOlustur(veri, { ad: "Temurlar Grup" }, [])).toEqual({ basarili: false, hatalar: ["En az bir fotoğraf yükleyin."] });
   });

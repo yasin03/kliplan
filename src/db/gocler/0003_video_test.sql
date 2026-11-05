@@ -1,0 +1,1 @@
+ALTER TABLE "video" ADD COLUMN "test" boolean DEFAULT false NOT NULL;

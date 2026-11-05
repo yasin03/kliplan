@@ -22,3 +22,12 @@ export const fiyatMetni = (veri: Partial<IlanBilgileri>) =>
 
 export const tarihMetni = (tarih: Date) =>
   tarih.toLocaleString("tr-TR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" });
+
+/** Panelde gösterilen iş bilgisi; istemci bileşenine yalnızca gereken alanlar gider. */
+export function isOzeti<T extends { tur: "senaryo" | "video"; durum: "bekliyor" | "calisiyor" | "tamamlandi" | "hata"; asama: string | null; ilerleme: number | null; hata: { adim: string; mesaj: string; cozum: string } | null }>(
+  is: T | null,
+) {
+  return is ? { tur: is.tur, durum: is.durum, asama: is.asama, ilerleme: is.ilerleme, hata: is.hata } : null;
+}
+
+export const boyutMetni = (bayt: number) => `${(bayt / 1024 / 1024).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} MB`;

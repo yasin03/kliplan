@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { anahtariDogrula, type Depolama, DepolamaHatasi, imzala } from "./Depolama.js";
+import { anahtariDogrula, type Depolama, DepolamaHatasi, GECERLI_INDIRME_ADI, imzala } from "./Depolama.js";
 
 /** Geliştirme için: dosyalar diskte tutulur, imzalı bağlantılar web uygulamasının `/dosya/...` yolundan sunulur. */
 export class YerelDepolama implements Depolama {
@@ -43,9 +43,10 @@ export class YerelDepolama implements Depolama {
     await rm(this.yol(temiz), { recursive: true, force: true });
   }
 
-  async imzaliBaglanti(anahtar: string, sureSn: number): Promise<string> {
+  async imzaliBaglanti(anahtar: string, sureSn: number, indirmeAdi?: string): Promise<string> {
+    if (indirmeAdi !== undefined && !GECERLI_INDIRME_ADI.test(indirmeAdi)) throw new DepolamaHatasi(`Geçersiz indirme adı: ${indirmeAdi}`);
     const son = Date.now() + sureSn * 1000;
-    const imza = imzala(anahtariDogrula(anahtar), son, this.gizli);
-    return `${this.adres}/dosya/${anahtar}?son=${son}&imza=${imza}`;
+    const imza = imzala(anahtariDogrula(anahtar), son, this.gizli, indirmeAdi);
+    return `${this.adres}/dosya/${anahtar}?son=${son}&imza=${imza}${indirmeAdi ? `&indir=${indirmeAdi}` : ""}`;
   }
 }

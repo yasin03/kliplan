@@ -4,12 +4,13 @@ import { cn } from "@/lib/utils";
 const ADIMLAR = [
   { yol: "bilgiler", ad: "Bilgiler" },
   { yol: "fotograflar", ad: "Fotoğraflar" },
-  { yol: null, ad: "Senaryo" },
-  { yol: null, ad: "Video" },
+  { yol: "senaryo", ad: "Senaryo" },
+  // Video durumu ve önizleme ilan sayfasında.
+  { yol: "", ad: "Video" },
 ] as const;
 
-/** Yeni ilan akışının adımları. Senaryo ve video adımları kuyruk eklenince (6.5) açılacak. */
-export function AdimCubugu({ ilanId, etkin }: { ilanId: string | null; etkin: "bilgiler" | "fotograflar" }) {
+/** Yeni ilan akışının adımları. */
+export function AdimCubugu({ ilanId, etkin }: { ilanId: string | null; etkin: "bilgiler" | "fotograflar" | "senaryo" }) {
   return (
     <ol className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
       {ADIMLAR.map((adim, i) => {
@@ -22,8 +23,8 @@ export function AdimCubugu({ ilanId, etkin }: { ilanId: string | null; etkin: "b
         );
         return (
           <li key={adim.ad} className={cn("flex items-center gap-2", aktif ? "font-medium" : "text-muted-foreground")} aria-current={aktif ? "step" : undefined}>
-            {adim.yol && ilanId && !aktif ? (
-              <Link href={`/ilan/${ilanId}/${adim.yol}`} className="flex items-center gap-2 hover:text-foreground">
+            {ilanId && !aktif ? (
+              <Link href={`/ilan/${ilanId}${adim.yol ? `/${adim.yol}` : ""}`} className="flex items-center gap-2 hover:text-foreground">
                 {metin}
               </Link>
             ) : (

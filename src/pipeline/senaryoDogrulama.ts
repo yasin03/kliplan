@@ -179,7 +179,8 @@ function metniDenetle(metin: string, yer: string, alanTuru: "baslik" | "disSes",
 
   const yerTutucusuz = metin.replace(YER_TUTUCU_DESENI, " ");
   if (/\{\{|\}\}/.test(yerTutucusuz)) hatalar.push(`${yer}: hatalı yer tutucu yazımı (süslü parantez).`);
-  const rakamlar = yerTutucusuz.match(/\d+/g);
+  // Ofis adı son sahnede zorunlu ve kayıttan gelir; "Emlak 360" gibi rakamlı bir ad hata sayılmaz.
+  const rakamlar = yerTutucusuz.split(ilan.emlakOfisi).join(" ").match(/\d+/g);
   if (rakamlar) hatalar.push(`${yer}: rakam kullanılamaz (${rakamlar.join(", ")}). Sayıları yazıyla veya yer tutucuyla yazın.`);
 
   const kucuk = kucult(yerTutucusuz);

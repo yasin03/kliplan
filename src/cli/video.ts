@@ -21,13 +21,16 @@ const program = new Command()
       if (secenekler.mock) console.log("ℹ Test üretimi (--mock): API kullanılmıyor, ses sessiz.\n");
 
       let sonYuzde = -1;
+      const senaryoSaglayici = senaryoSaglayicisi({ mock: secenekler.mock });
+      const sesSaglayici = sesSaglayicisi({ mock: secenekler.mock });
       const sonuc = await videoUret({
         klasor,
         ciktiKlasoru,
         onbellekKlasoru: onbellekKlasoru(klasor),
-        senaryoSaglayici: senaryoSaglayicisi({ mock: secenekler.mock }),
-        sesSaglayici: sesSaglayicisi({ mock: secenekler.mock }),
-        test: secenekler.mock,
+        senaryoSaglayici,
+        sesSaglayici,
+        // .env'de sahte sağlayıcı seçilmişse de rapora "test üretimi" yazılır.
+        test: !senaryoSaglayici.ucretli || !sesSaglayici.ucretli,
         zorla: secenekler.force,
         bildir: (m) => console.log(m),
         ilerleme: (oran) => {

@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, max } from "drizzle-orm";
+import { and, asc, desc, eq, max, ne } from "drizzle-orm";
 import type { Veritabani } from "../db/baglanti.js";
-import { fotograf, ilan, ofis, video } from "../db/sema.js";
+import { fotograf, ilan, type KayitliHata, ofis, uretimIsi, video } from "../db/sema.js";
 import { anahtariDogrula, type Depolama, ilanOneki } from "../depolama/Depolama.js";
 import { EN_FAZLA_FOTOGRAF } from "./fotografIsleme.js";
 import { BulunamadiHatasi, dosyayaErisebilirMi, ErisimHatasi, hedefOfis, ofisKosulu, type Yetki } from "./yetki.js";
@@ -28,6 +28,12 @@ export function depoOlustur(db: Veritabani, yetki: Yetki, depolama: Depolama) {
   async function fotografBul(id: string) {
     const kayit = await db.query.fotograf.findFirst({ where: and(eq(fotograf.id, id), ofisKosulu(yetki, fotograf.ofisId)) });
     if (!kayit) throw new BulunamadiHatasi("Fotoğraf bulunamadı.");
+    return kayit;
+  }
+
+  async function videoBul(id: string) {
+    const kayit = await db.query.video.findFirst({ where: and(eq(video.id, id), ofisKosulu(yetki, video.ofisId)) });
+    if (!kayit) throw new BulunamadiHatasi("Video bulunamadı.");
     return kayit;
   }
 
@@ -171,9 +177,86 @@ export function depoOlustur(db: Veritabani, yetki: Yetki, depolama: Depolama) {
       await taslagaDondur(ilanId);
     },
 
+    /** Senaryo düzenleme ekranından; doğrulama çağıran tarafta (`duzenlenenSenaryo`) yapılır. Eski video geçerliliğini yitirir. */
+    async senaryoKaydet(ilanId: string, senaryo: unknown) {
+      await duzenlenecekIlan(ilanId);
+      await db.update(ilan).set({ senaryo, durum: "taslak", hata: null }).where(eq(ilan.id, ilanId));
+    },
+
+    /**
+     * Üretim işini kaydeder ve ilanı "üretiliyor" yapar. Aynı ilanda ikinci bir iş başlatılamaz;
+     * kontrol ve kilit tek sorguda yapıldığı için iki sekmeden aynı anda basılsa da tek iş açılır.
+     * Kuyruğa ekleme çağıranın işi; eklenemezse `isBasarisiz` çağrılmalı.
+     */
+    async uretimBaslat(ilanId: string, tur: "senaryo" | "video", zorla = false) {
+      const kayit = await ilanBul(ilanId);
+      if (tur === "video" && !kayit.senaryo) throw new DuzenlemeHatasi("Önce senaryoyu üretin.");
+      return db.transaction(async (tx) => {
+        const [kilit] = await tx
+          .update(ilan)
+          .set({ durum: "uretiliyor", hata: null })
+          .where(and(eq(ilan.id, ilanId), ne(ilan.durum, "uretiliyor")))
+          .returning({ id: ilan.id });
+        if (!kilit) throw new DuzenlemeHatasi("Bu ilan için üretim zaten sürüyor.");
+        const [is] = await tx.insert(uretimIsi).values({ ofisId: kayit.ofisId, ilanId, tur, zorla }).returning();
+        return is!;
+      });
+    },
+
+    /** Kuyruğa eklenemeyen işi hata olarak kapatır; ilan "hata" durumuna geçer ve yeniden denenebilir. */
+    async isBasarisiz(isId: string, hata: KayitliHata) {
+      const is = await db.query.uretimIsi.findFirst({ where: and(eq(uretimIsi.id, isId), ofisKosulu(yetki, uretimIsi.ofisId)) });
+      if (!is) throw new BulunamadiHatasi("İş bulunamadı.");
+      await db.update(uretimIsi).set({ durum: "hata", hata, bitis: new Date() }).where(eq(uretimIsi.id, isId));
+      await db.update(ilan).set({ durum: "hata", hata }).where(eq(ilan.id, is.ilanId));
+    },
+
+    /** İlanın en son işi: durum, adım ve ilerleme panelde bundan gösterilir. */
+    async sonIs(ilanId: string) {
+      await ilanBul(ilanId);
+      return (await db.query.uretimIsi.findFirst({ where: eq(uretimIsi.ilanId, ilanId), orderBy: desc(uretimIsi.olusturma) })) ?? null;
+    },
+
     async videolar(ilanId: string) {
       await ilanBul(ilanId);
       return db.query.video.findMany({ where: eq(video.ilanId, ilanId), orderBy: desc(video.surum) });
+    },
+
+    /**
+     * Son sürümü onaylar ve ilanı "onaylandı" yapar. Kontrol listesinin tam olduğunu çağıran doğrular
+     * (`kontrolMaddeleri`); burada işaretlenen maddelerin metni onay kaydı olarak saklanır.
+     */
+    async videoOnayla(videoId: string, kontrolListesi: string[]) {
+      const kayit = await videoBul(videoId);
+      if (kayit.test) throw new DuzenlemeHatasi("Test üretimi (sahte ses ve metin) onaylanamaz. Videoyu gerçek sağlayıcılarla yeniden üretin.");
+      if (kayit.onayZamani) throw new DuzenlemeHatasi("Bu video zaten onaylandı.");
+      const [son] = await db.query.video.findMany({ where: eq(video.ilanId, kayit.ilanId), orderBy: desc(video.surum), limit: 1, columns: { id: true } });
+      if (son?.id !== kayit.id) throw new DuzenlemeHatasi("Yalnızca en son sürüm onaylanabilir.");
+      await db.transaction(async (tx) => {
+        const [ilanKaydi] = await tx
+          .update(ilan)
+          .set({ durum: "onaylandi" })
+          .where(and(eq(ilan.id, kayit.ilanId), eq(ilan.durum, "kontrol_bekliyor")))
+          .returning({ id: ilan.id });
+        if (!ilanKaydi) throw new DuzenlemeHatasi("İlan onaya hazır değil; bilgiler değişmiş veya üretim sürüyor olabilir. Sayfayı yenileyin.");
+        await tx.update(video).set({ kontrolListesi, onaylayanId: yetki.kullaniciId, onayZamani: new Date() }).where(eq(video.id, kayit.id));
+      });
+    },
+
+    /**
+     * İndirme bağlantısı. Video ve kapak yalnızca onaydan sonra indirilir (onaysız videonun yanlışlıkla
+     * gönderilmesini önlemek için); kontrol raporu her zaman.
+     */
+    async videoIndirmeBaglantisi(videoId: string, dosya: "video" | "kapak" | "rapor") {
+      const kayit = await videoBul(videoId);
+      if (dosya !== "rapor" && !kayit.onayZamani) throw new ErisimHatasi("Video onaylanmadan indirilemez. Önce kontrol listesini tamamlayıp onaylayın.");
+      const { anahtar, uzanti } = {
+        video: { anahtar: kayit.videoAnahtari, uzanti: "mp4" },
+        kapak: { anahtar: kayit.kapakAnahtari, uzanti: "jpg" },
+        rapor: { anahtar: kayit.raporAnahtari, uzanti: "md" },
+      }[dosya];
+      const ad = `kliplan-${dosya === "rapor" ? "kontrol-raporu" : dosya}-s${kayit.surum}.${uzanti}`;
+      return depolama.imzaliBaglanti(anahtar, BAGLANTI_SURESI_SN, ad);
     },
 
     /** Yalnızca kendi ofisinin dosyası için kısa ömürlü bağlantı üretir. */

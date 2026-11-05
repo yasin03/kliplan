@@ -61,7 +61,7 @@ describe("uçtan uca üretim", () => {
     expect(rapor).toContain("| Net m² | 65 m² | `netM2` | sahne metni |");
     expect(rapor).toMatch(/⚠ \*\*Kira durumu:\*\* .*onaylı değil/);
     expect(rapor).toContain("Toplam tahmini API maliyeti: ~$0.0000");
-    expect(rapor).toContain("- [ ] Video emlakçıya gönderilmeden önce baştan sona izlendi.");
+    expect(rapor).toContain("- [ ] Video baştan sona izlendi.");
     // Onaysız kira uyarı olarak raporda görünür ama sahnelere girmez.
     const sahneBolumu = rapor.split("## Sahneler")[1]!.split("## Göndermeden")[0]!;
     expect(sahneBolumu).not.toMatch(/kira|25\.000/i);

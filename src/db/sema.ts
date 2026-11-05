@@ -175,6 +175,12 @@ export const uretimIsi = pgTable(
       .references(() => ilan.id, { onDelete: "cascade" }),
     tur: isTuru().notNull(),
     durum: isDurumu().notNull().default("bekliyor"),
+    /** Panelde gösterilen son adım, ör. "4/6 Dış ses üretiliyor…". */
+    asama: text(),
+    /** Render ilerlemesi (0-1); diğer adımlarda boş. */
+    ilerleme: real(),
+    /** Önbelleği yok sayarak üret (senaryoyu yeniden yazdırmak için). */
+    zorla: boolean().notNull().default(false),
     hata: jsonb().$type<KayitliHata>(),
     maliyetUsd: real(),
     baslangic: zaman(),
@@ -203,6 +209,8 @@ export const video = pgTable(
     sureSn: real().notNull(),
     boyutBayt: integer().notNull(),
     maliyetUsd: real().notNull(),
+    /** Sahte sağlayıcılarla (`--mock`) üretildi; müşteriye gönderilmez, onaylanamaz. */
+    test: boolean().notNull().default(false),
     /** Onaylayan kullanıcının işaretlediği kontrol listesi maddeleri. */
     kontrolListesi: jsonb().$type<string[]>(),
     onaylayanId: text().references(() => user.id, { onDelete: "set null" }),
