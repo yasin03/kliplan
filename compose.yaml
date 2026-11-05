@@ -1,0 +1,35 @@
+# Geliştirme servisleri (Faz 6). Başlatma: docker compose up -d · Durdurma: docker compose down
+# Yalnızca 127.0.0.1'e açılır; sunucu kurulumu ayrı yapılacak (6.8).
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: kliplan
+      POSTGRES_PASSWORD: kliplan-yerel
+      POSTGRES_DB: kliplan
+    ports:
+      - "127.0.0.1:5432:5432"
+    # Postgres 18 imajında veri /var/lib/postgresql/18/docker altında; birim üst klasöre bağlanır.
+    volumes:
+      - postgres-veri:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kliplan -d kliplan"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    # BullMQ, kuyruk anahtarlarının silinmemesi için "noeviction" ister.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-veri:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  postgres-veri:
+  redis-veri:

@@ -80,6 +80,15 @@ describe("ilan klasörü doğrulaması", () => {
     expect(rapor.hatalar).toEqual([{ seviye: "hata", alan: "Logo", mesaj: "Logo dosyası bulunamadı: logo.png" }]);
   });
 
+  it("lacivert zeminde okunmayan vurgu rengini hata olarak raporluyor, okunanı kabul ediyor", async () => {
+    const koyu = await ilanKlasorunuDogrula(await geciciIlanKlasoru({ ...temurlarVerisi(), vurguRengi: "#1E3A8A" }, TEMURLAR_FOTOGRAFLARI));
+    expect(koyu.rapor.hatalar.map((h) => h.alan)).toEqual(["Vurgu rengi"]);
+    expect(koyu.rapor.hatalar[0]!.mesaj).toMatch(/okunmuyor \(kontrast 1\.\d:1, en az 3:1/);
+
+    const acik = await ilanKlasorunuDogrula(await geciciIlanKlasoru({ ...temurlarVerisi(), vurguRengi: "#4FD1C5" }, TEMURLAR_FOTOGRAFLARI));
+    expect(acik.rapor.gecerli).toBe(true);
+  });
+
   it("açılamayan görseli hata olarak raporluyor", async () => {
     const klasor = await geciciIlanKlasoru(temurlarVerisi(), TEMURLAR_FOTOGRAFLARI);
     await writeFile(path.join(klasor, "fotograflar", "05-koridor.png"), "görsel değil");

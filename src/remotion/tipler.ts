@@ -38,6 +38,8 @@ export type VideoProps = {
     logo: string | null;
   };
   iletisim: Iletisim;
+  /** Ofise özel vurgu rengi (`#RRGGBB`). Verilmezse temadaki renk kullanılır. */
+  vurguRengi?: string | undefined;
   /** `public` klasörüne göre fon müziği yolu. Verilmezse müzik çalmaz. */
   muzik?: string | null | undefined;
 };

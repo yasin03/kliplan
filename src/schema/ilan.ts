@@ -69,6 +69,8 @@ export const ilanSemasi = z.strictObject({
   ozellikler: z.array(bosOlmayanMetin).default([]),
   kiraDurumu: kiraDurumuSemasi.optional(),
   logo: bosOlmayanMetin.optional(),
+  /** Ofise özel vurgu rengi. Verilmezse temadaki amber kullanılır. */
+  vurguRengi: z.string().regex(/^#[0-9A-Fa-f]{6}$/, { error: "Vurgu rengi '#F2A541' biçiminde olmalı" }).optional(),
   /** Fon müziği. Yalnızca ticari kullanım izni olan yerel bir dosya; izin bilgisi kontrol raporuna yazılır. */
   muzik: z
     .strictObject({

@@ -28,6 +28,7 @@ const ALAN_ADLARI: Record<string, string> = {
   kiraTl: "Kira tutarı",
   not: "Not",
   logo: "Logo",
+  vurguRengi: "Vurgu rengi",
   muzik: "Müzik",
   lisans: "Lisans",
   telaffuz: "Telaffuz",

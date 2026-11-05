@@ -6,6 +6,7 @@ import { SenaryoHatasi } from "../pipeline/senaryoUretimi.js";
 import { TelaffuzHatasi } from "../pipeline/telaffuz.js";
 import { AdimHatasi } from "../pipeline/uretim.js";
 import { VideoVerisiHatasi, videoPropsOlustur } from "../pipeline/videoProps.js";
+import { KullaniciHatasi } from "../kimlik/kullanici.js";
 import { SaglayiciHatasi } from "../providers/ScriptProvider.js";
 import type { VideoProps } from "../remotion/tipler.js";
 import { alanYolu, turkceHataHaritasi } from "../schema/hatalar.js";
@@ -72,7 +73,8 @@ export async function calistir(is: () => Promise<void>) {
       hata instanceof VideoVerisiHatasi ||
       hata instanceof SenaryoHatasi ||
       hata instanceof SaglayiciHatasi ||
-      hata instanceof TelaffuzHatasi
+      hata instanceof TelaffuzHatasi ||
+      hata instanceof KullaniciHatasi
     ) {
       console.error(`✗ ${hata.message}`);
     } else {

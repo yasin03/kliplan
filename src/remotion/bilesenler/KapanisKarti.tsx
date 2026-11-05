@@ -1,5 +1,6 @@
 import { spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { tema } from "../tema.js";
+import { useVurgu } from "../vurgu.js";
 import type { Iletisim, VideoProps } from "../tipler.js";
 import { OfisRozeti } from "./OfisRozeti.js";
 
@@ -10,6 +11,7 @@ export const KapanisKarti: React.FC<Props> = ({ iletisim, ofis }) => {
   const kare = useCurrentFrame();
   const { fps } = useVideoConfig();
   const giris = spring({ frame: kare - 8, fps, config: { damping: 200 } });
+  const vurgu = useVurgu();
 
   return (
     <div
@@ -18,7 +20,7 @@ export const KapanisKarti: React.FC<Props> = ({ iletisim, ofis }) => {
         transform: `scale(${0.96 + giris * 0.04})`,
         background: `${tema.renkler.lacivert}EB`,
         borderRadius: 40,
-        borderTop: `10px solid ${tema.renkler.vurgu}`,
+        borderTop: `10px solid ${vurgu}`,
         padding: "48px 52px",
         display: "flex",
         flexDirection: "column",
@@ -26,7 +28,7 @@ export const KapanisKarti: React.FC<Props> = ({ iletisim, ofis }) => {
         boxShadow: "0 40px 100px rgba(0, 0, 0, 0.5)",
       }}
     >
-      <div style={{ color: tema.renkler.vurgu, fontSize: 104, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1 }}>
+      <div style={{ color: vurgu, fontSize: 104, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1 }}>
         {iletisim.fiyat}
       </div>
       {iletisim.konum ? (

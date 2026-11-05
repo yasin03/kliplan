@@ -79,6 +79,13 @@ describe("fotoğraf hazırlama", () => {
     await expect(readFile(path.join(publicKlasoru, "fontlar", "Inter-Variable.ttf"))).resolves.toBeDefined();
   });
 
+  it("ofisin vurgu rengini video verisine taşıyor; verilmezse boş bırakıyor", () => {
+    const hazirlik = { publicKlasoru: "", logo: null, muzik: null, fotograflar: { "01-bina.jpg": { src: "ilan/01-bina.jpg", genislik: 1, yukseklik: 1 } } };
+    const sahneler = [{ fotograf: "01-bina.jpg", baslik: "a", disSes: "b", sureSn: 3 }];
+    expect(videoPropsOlustur(ilanSemasi.parse({ ...temurlarVerisi(), vurguRengi: "#4FD1C5" }), sahneler, hazirlik).vurguRengi).toBe("#4FD1C5");
+    expect(videoPropsOlustur(temurlar(), sahneler, hazirlik).vurguRengi).toBeUndefined();
+  });
+
   it("sahnedeki fotoğraf ilan listesinde yoksa anlaşılır hata veriyor", () => {
     const hazirlik = { publicKlasoru: "", logo: null, muzik: null, fotograflar: {} };
     const sahneler = [{ fotograf: "yok.jpg", baslik: "a", disSes: "b", sureSn: 3 }];

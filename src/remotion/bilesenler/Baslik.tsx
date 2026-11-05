@@ -1,12 +1,14 @@
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { BASLIK_EN_FAZLA_SATIR, baslikYaziBoyutu } from "../hesap.js";
 import { tema } from "../tema.js";
+import { useVurgu } from "../vurgu.js";
 
 export const Baslik: React.FC<{ metin: string }> = ({ metin }) => {
   const kare = useCurrentFrame();
   const { fps } = useVideoConfig();
   const giris = spring({ frame: kare - 4, fps, config: { damping: 200 } });
   const boyut = baslikYaziBoyutu(metin);
+  const vurgu = useVurgu();
 
   return (
     <div style={{ opacity: giris, transform: `translateY(${interpolate(giris, [0, 1], [24, 0])}px)` }}>
@@ -28,7 +30,7 @@ export const Baslik: React.FC<{ metin: string }> = ({ metin }) => {
       >
         {metin}
       </div>
-      <div style={{ width: 96, height: 8, borderRadius: 4, marginTop: 24, background: tema.renkler.vurgu }} />
+      <div style={{ width: 96, height: 8, borderRadius: 4, marginTop: 24, background: vurgu }} />
     </div>
   );
 };

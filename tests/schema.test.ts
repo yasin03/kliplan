@@ -67,6 +67,11 @@ describe("ilan şeması", () => {
     expect(dogrula(veri).mesajlar).toEqual(["ilan.json: tanınmayan alan: odaSaysi (yazım hatası olabilir)"]);
   });
 
+  it("hatalı vurgu rengi biçimini reddediyor", () => {
+    const { mesajlar } = dogrula({ ...temurlarVerisi(), vurguRengi: "turuncu" });
+    expect(mesajlar).toEqual(["Vurgu rengi: Vurgu rengi '#F2A541' biçiminde olmalı"]);
+  });
+
   it("boş fotoğraf listesini reddediyor", () => {
     const veri = temurlarVerisi();
     veri.fotograflar = [];

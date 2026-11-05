@@ -2,7 +2,7 @@
 
 Kliplan, emlak ilanı bilgilerinden (`ilan.json`) ve yerel fotoğraflardan 20-30 saniyelik dikey tanıtım videosu (MP4) üretir.
 
-> Durum: **Faz 5 (tek komutla uçtan uca üretim) tamamlandı.** 1. aşama bitti. Web uygulaması (Faz 6) ancak talep doğrulandıktan sonra yapılacak.
+> Durum: **Faz 6 (web uygulaması) başladı.** Plan ve barındırma kararları: `docs/faz6-plan.md`. Tamamlanan adımlar: 6.1 çekirdek ayrımı, 6.2 altyapı ve giriş, 6.3 müşteri ayrımı, 6.4 ilan formu ve fotoğraf yükleme.
 
 ## Gereksinimler
 
@@ -112,6 +112,7 @@ ilanlar/<ilan-adi>/
 - `fotograflar` listesindeki her dosya `fotograflar/` klasöründe bulunmalıdır. Dosya adı uzantısıyla birlikte birebir eşleşmelidir (`.jpg` ≠ `.png`).
 - Fotoğraf türleri: `bina`, `salon`, `mutfak`, `yatak_odasi`, `banyo`, `koridor`, `balkon`, `cocuk_odasi`, `dis_mekan`, `manzara`, `diger`.
 - İsteğe bağlı `logo`: ilan klasörüne göre dosya yolu, ör. `"logo.png"`.
+- İsteğe bağlı `vurguRengi`: ofise özel vurgu rengi, ör. `"#4FD1C5"`. Başlık çizgisinde, altyazı kutusunda ve kapanış kartındaki fiyatta kullanılır. Lacivert zemine karşı kontrastı 3:1'den düşükse doğrulama hata verir. Verilmezse temadaki amber kullanılır.
 
 Doğrulamanın raporladıkları:
 
@@ -202,6 +203,96 @@ docs/         görev tanımı ve notlar
   - Müzik dış sesin altında %10 seviyede çalar; başta açılır, sonda kısılır. Seviye [tema.ts](src/remotion/tema.ts) dosyasından değiştirilir.
 - **Önbellek:** Sesler `.cache/<ilan>/public/ses/<özet>.mp3` olarak, zamanlarıyla birlikte saklanır. Özet; sağlayıcı, ses, okunan metin ve telaffuz sözlüğünden hesaplanır. Aynı içerik ikinci kez ücretli API'ye gönderilmez.
 - **Maliyet:** Karakter sayısı × $15 / 1M karakter (Azure Neural, Kasım 2026). Senaryo maliyetiyle birlikte komut sonunda raporlanır. Azure F0 ücretsiz kotası (ayda 0,5M karakter) içindeyseniz ödeme yapılmaz.
+
+## Web uygulaması (Faz 6)
+
+### 6.1 Çekirdek ayrımı
+
+Web uygulamasında senaryo, video üretilmeden önce kullanıcıya gösterilip düzenlenebilecek. Bunun için [src/pipeline/uretim.ts](src/pipeline/uretim.ts) üç aşamaya bölündü. `videoUret` (CLI) bu üç aşamayı art arda çağırır; davranışı değişmedi.
+
+| Fonksiyon | Adımlar | API |
+|---|---|---|
+| `ilanHazirla` | 1 doğrulama, 2 fotoğraflar | yok |
+| `senaryoAsamasi` | 3 senaryo | yapay zeka (önbellekte yoksa) |
+| `videoAsamasi` | 4 dış ses, 5 render, 6 rapor | ses (önbellekte yoksa) |
+
+- **Düzenlenen senaryo:** Önce `duzenlenenSenaryo` ([src/pipeline/senaryoUretimi.ts](src/pipeline/senaryoUretimi.ts)) ile yapay zeka çıktısıyla aynı kurallardan geçirilir. Rakam, abartılı ifade, konum adı, onaysız bilgi veya listede olmayan fotoğraf varsa `SenaryoHatasi` fırlatır. Veritabanından geri okunan senaryo da her seferinde bu kontrolden geçer.
+- Senaryo elle değiştirildiyse `senaryo.json`'a `"duzenlendi": true` yazılır, kontrol raporunda da belirtilir.
+- **Vurgu rengi** Remotion'a `VideoProps.vurguRengi` ile gelir. Bileşenler rengi `useVurgu()` ([src/remotion/vurgu.ts](src/remotion/vurgu.ts)) ile okur. Lacivert ve beyaz zemin bilerek sabit tutuldu.
+
+### 6.2 Altyapı ve giriş
+
+**Geliştirme ortamını kurma:**
+
+```bash
+# OrbStack kurulu ve açık olmalı (ticari kullanımda Pro lisansı gerekir)
+docker compose up -d          # PostgreSQL 18 + Redis 8 (compose.yaml)
+npm run db:uygula             # migration'ları uygular
+npm run kullanici-ekle -- --eposta admin@ornek.com --ad "Ad Soyad" --admin
+npm run kullanici-ekle -- --eposta emlakci@ornek.com --ad "Ad Soyad" --ofis "Temurlar Grup"
+npm run web                   # http://localhost:3100
+```
+
+`.env` içinde `DATABASE_URL`, `REDIS_URL`, `BETTER_AUTH_SECRET` (`openssl rand -base64 32`) ve `BETTER_AUTH_URL` dolu olmalı (bkz. `.env.example`).
+
+| Komut | Açıklama |
+|---|---|
+| `npm run web` | Web panelini geliştirme modunda açar (port 3100) |
+| `npm run kullanici-ekle -- --eposta … --ad … --ofis …` | Hesap açar. Ofis yoksa oluşturur. `--sifre` verilmezse rastgele şifre üretir ve bir kez gösterir. `--admin` ile yönetici hesabı açılır. |
+| `npm run db:uret -- --name <ad>` | `src/db/sema.ts` değişince yeni migration üretir (`src/db/gocler/`) |
+| `npm run db:uygula` | Migration'ları veritabanına uygular |
+
+- **Yapı:** npm workspaces. Çekirdek kod kökte (`src/`), Next.js uygulaması `web/` içinde. Web, çekirdeği `@cekirdek/*` yoluyla import eder ([web/tsconfig.json](web/tsconfig.json)).
+- **Webpack modu:** Çekirdek kod NodeNext gereği `.js` uzantılı import ediyor. Next.js 16'nın varsayılan derleyicisi Turbopack bunu `.ts` dosyasına çözmüyor, bu yüzden `next dev/build --webpack` ve `extensionAlias` kullanılıyor ([web/next.config.ts](web/next.config.ts)). Turbopack desteği gelirse bayrak kaldırılabilir.
+- **Ortam değişkenleri:** Web uygulaması kökteki `.env` dosyasını okur; ayrı bir `web/.env` yok.
+- **Veritabanı:** PostgreSQL + Drizzle ORM. Şema: [src/db/sema.ts](src/db/sema.ts). Kodda camelCase, veritabanında snake_case. Ofise bağlı her tabloda `ofisId` var (müşteri ayrımı, 6.3).
+- **Giriş:** Better Auth, e-posta + şifre ([src/kimlik/auth.ts](src/kimlik/auth.ts)).
+  - Açık kayıt kapalı (`disableSignUp`); dışarıdan kayıt isteği reddedilir.
+  - Şifre en az 10 karakter.
+  - Admin (`rol: "admin"`) ofise bağlı değildir.
+  - `proxy.ts` yalnızca çerez var mı diye hızlı bakar. Asıl oturum doğrulaması her sayfada `girisGerekli()` ile yapılır ([web/lib/oturum.ts](web/lib/oturum.ts)).
+- **Arayüz:** Tailwind CSS 4 + shadcn/ui (`base-nova`). Font, videodaki Inter'in yerel kopyası; shadcn'in varsayılan Geist fontunun Latin alt kümesi ğ, ş, ı karakterlerini içermiyordu. `web/components/ui/` shadcn'in ürettiği kod olduğu için lint dışında.
+- **Testler:** Veritabanı testleri aynı sunucuda ayrı bir `kliplan_test` veritabanı kullanır, geliştirme verisine dokunmaz. PostgreSQL kapalıysa uyarıyla atlanır.
+- **`npm audit`:** `drizzle-kit` (yalnızca geliştirme aracı) eski bir esbuild sürümü getiriyor. Bu sürümdeki açık esbuild'in geliştirme sunucusunu etkiliyor; Kliplan o sunucuyu kullanmıyor ve uygulamanın çalışmasına etkisi yok.
+- **Port 3100:** Bu makinede 3000 numaralı port başka bir projede kullanıldığı için seçildi.
+
+### 6.3 Müşteri ayrımı ve dosya erişimi
+
+- **Veri katmanı** ([src/veri/depo.ts](src/veri/depo.ts)): Web kodu ofise bağlı verilere yalnızca `girisGerekli()` ile gelen `depo` üzerinden erişir. Her sorgu oturumdaki ofisle filtrelenir. Başka bir ofisin kaydı, hiç yokmuş gibi "İlan bulunamadı" hatası verir; böylece kaydın varlığı da sızmaz.
+  - Admin (`rol: "admin"`) bütün ofisleri görür. Admin ilan oluştururken ofis seçmek zorundadır.
+  - Ofise bağlı olmayan bir üye hiçbir şey göremez.
+  - Kural lint ile zorunlu: `web/` içinde `@cekirdek/db/*` ve `drizzle-orm` import edilemez. Tek istisna `web/lib/auth.ts`.
+- **Dosya deposu** ([src/depolama/](src/depolama/)): `Depolama` arayüzü.
+  - Anahtarlar `ofis/<ofisId>/ilan/<ilanId>/...` biçiminde. Klasör dışına çıkan (`..`), mutlak veya beklenmeyen karakter içeren anahtarlar reddedilir.
+  - İlan silinince depodaki bütün dosyaları da silinir.
+  - Geliştirmede `YerelDepolama` kullanılır: dosyalar `.depolama/` altında, git'e eklenmez. S3/R2 sağlayıcısı sunucu kurulumunda (6.8) eklenecek.
+- **İmzalı bağlantılar:** Fotoğraf ve videolar 10 dakika geçerli bağlantılarla açılır.
+  - Bağlantı yalnızca kullanıcının kendi ofisinin dosyası için üretilir.
+  - Yerelde `/dosya/...` yolu HMAC imzasını ve süreyi doğrular. Süresi dolmuş, değiştirilmiş veya imzasız bağlantı 403 verir.
+  - Sunucuda R2'nin kendi imzalı bağlantıları kullanılacak.
+- **Testler:** İki ofisle okuma, güncelleme, silme, fotoğraf ekleme, video listeleme ve dosya bağlantısı denemeleri ([tests/erisim.test.ts](tests/erisim.test.ts)). Her veritabanı test dosyası kendi `kliplan_test_<ad>` veritabanını kullanır, paralel çalışırken birbirini etkilemez.
+
+### 6.4 İlan formu ve fotoğraf yükleme
+
+Panelde akış: **İlanlar → Yeni ilan → Bilgiler → Fotoğraflar → İlan sayfası**. Senaryo ve video adımları 6.5'te eklenecek.
+
+- **Form** ([src/veri/ilanFormu.ts](src/veri/ilanFormu.ts)): `ilan.json` ile aynı Zod şemasından geçer. Hatalar Türkçe ve ilgili alanın altında gösterilir; hata olunca girilen değerler kaybolmaz.
+  - Esnek giriş: fiyat `4.500.000` veya `4500000 TL`, telefon `05057094488` veya `+90 505…` yazılabilir; kod `0505 709 44 88` biçimine çevirir. Metrekarede virgül kabul edilir.
+  - Fiyat, konum, telefon ve yetki belgesinin yanında "Bu bilgiyi doğruladım" kutusu var (`onayli`). İşaretlenmeyen bilgi videoda kullanılmaz; ilan sayfasında uyarı olarak görünür.
+  - Emlak ofisi adı formda sorulmaz, ofis kaydından gelir. Logo, vurgu rengi ve müzik ofis ayarlarında (6.7). Telaffuz sözlüğü şimdilik yalnızca CLI'da.
+  - `ilanNo` zorunlu kaldı (şema değişmedi). Yalnızca kontrol raporunun başlığında kullanılıyor.
+  - Bilgi veya fotoğraf değişince ilan **taslağa** döner ve kayıtlı senaryo silinir; çünkü eski senaryo eski bilgilere göre yazılmıştı. Video üretilirken değişikliğe izin verilmez.
+  - İlan sayfası, pipeline'ın göreceği `ilan.json`'u (`ilanJsonuOlustur`) ve CLI'daki tutarlılık kontrolünü çalıştırıp eksikleri ve uyarıları gösterir.
+- **Fotoğraflar** ([src/veri/fotografIsleme.ts](src/veri/fotografIsleme.ts)): Sürükle-bırak veya dosya seçerek yüklenir. Her fotoğrafın türü seçilir, oklarla sıralanır, silinebilir.
+  - İçeriğe bakılarak doğrulanır, uzantıya güvenilmez. JPEG, PNG ve WebP kabul edilir; HEIC için telefonda JPEG'e geçme yolu anlatılır.
+  - Dosya başına en fazla 20 MB, ilan başına en fazla 20 fotoğraf.
+  - Sunucuda EXIF yönüne göre döndürülür, uzun kenarı 2160 px'e küçültülür (pipeline da bu boyutu kullanıyor) ve JPEG olarak saklanır.
+  - **EXIF bilgisi silinir.** Telefon fotoğraflarındaki GPS konumu ve cihaz bilgisi saklanmaz. Dosya adı rastgele üretilir; kullanıcının dosya adı (kişisel bilgi içerebilir) kullanılmaz.
+  - Uzun kenarı 1280 px'ten kısa fotoğrafta "düşük çözünürlük" uyarısı çıkar.
+  - Yükleme bir route ile yapılır (`POST /api/ilan/<id>/fotograf`), çünkü sunucu eylemlerinin gövde sınırı 1 MB. `/api` yolları proxy'den geçmez, çünkü proxy istek gövdesini 10 MB'ta kesiyor. Route oturumu kendisi doğrular ve başka siteden gelen istekleri reddeder.
+  - Sıralama oklarla yapılıyor. Sürükleyerek sıralama, telefonda da çalışması için ek kütüphane gerektirdiği için eklenmedi.
+- **Veritabanı:** `fotograf` tablosuna `genislik` ve `yukseklik` eklendi (migration `0001`). Uygulamak için: `npm run db:uygula`.
+- **Testler:** Form dönüşümü ve doğrulaması ([tests/ilanFormu.test.ts](tests/ilanFormu.test.ts)), fotoğraf işleme ve EXIF silme ([tests/fotografIsleme.test.ts](tests/fotografIsleme.test.ts)), başka ofisin fotoğrafını değiştirme, silme ve sıralama denemeleri ([tests/erisim.test.ts](tests/erisim.test.ts)).
 
 ## Lisans ve ses aracı
 

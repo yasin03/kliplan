@@ -10,9 +10,13 @@ node_modules/
 cikti/*
 !cikti/.gitkeep
 .cache/
+.depolama/
 out/
 build/
 coverage/
+web/.next/
+web/next-env.d.ts
+*.tsbuildinfo
 
 # Gerçek ilan fotoğrafları (kişisel/ticari veri)
 ilanlar/*/fotograflar/*

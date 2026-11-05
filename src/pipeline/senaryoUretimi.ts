@@ -33,6 +33,8 @@ export type SenaryoSonucu = {
   toplamMaliyetUsd: number;
   onbellektenMi: boolean;
   saglayici: string;
+  /** Yapay zeka çıktısı sonradan elle düzenlendiyse `true`. */
+  duzenlendi: boolean;
 };
 
 /** Türkçe dış ses için ortalama konuşma hızı (kelime/saniye). Faz 4'te gerçek ses süresi kullanılacak. */
@@ -54,7 +56,9 @@ export function sureleriTahminEt(sesMetinleri: string[]): number[] {
   return ham.map((s) => Math.min(10, Math.round(s * oran * 10) / 10));
 }
 
-export function sahnelereDonustur(senaryo: YzSenaryo, tablo: Partial<Record<YerTutucu, YerTutucuDegeri>>): Sahne[] {
+type Tablo = Partial<Record<YerTutucu, YerTutucuDegeri>>;
+
+export function sahnelereDonustur(senaryo: YzSenaryo, tablo: Tablo): Sahne[] {
   const sesler = senaryo.sahneler.map((s) => yerTutuculariDoldur(s.disSes, tablo, "ses"));
   const sureler = sureleriTahminEt(sesler);
   return senaryo.sahneler.map((s, i) => ({
@@ -64,6 +68,36 @@ export function sahnelereDonustur(senaryo: YzSenaryo, tablo: Partial<Record<YerT
     altyazi: yerTutuculariDoldur(s.ekranMetni, tablo, "ekran"),
     sureSn: sureler[i]!,
   }));
+}
+
+function sonucKur(
+  senaryo: YzSenaryo,
+  tablo: Tablo,
+  bilgi: Pick<SenaryoSonucu, "denemeler" | "onbellektenMi" | "saglayici" | "duzenlendi">,
+): SenaryoSonucu {
+  const adlar = new Set(senaryo.sahneler.flatMap((s) => yerTutuculariBul(`${s.baslik} ${s.disSes}`)) as YerTutucu[]);
+  return {
+    ...bilgi,
+    senaryo,
+    sahneler: sahnelereDonustur(senaryo, tablo),
+    kullanilanYerTutucular: [...adlar].map((ad) => ({ ad, ...tablo[ad]! })),
+    toplamMaliyetUsd: bilgi.denemeler.reduce((t, d) => t + (d.kullanim?.tahminiMaliyetUsd ?? 0), 0),
+  };
+}
+
+/**
+ * Kullanıcının düzenlediği (veya veritabanından geri okunan) senaryoyu yapay zeka çıktısıyla aynı
+ * kurallardan geçirir. Kurallara uymazsa `SenaryoHatasi` fırlatır; kritik bilgiler yine yer tutucuyla kalır.
+ */
+export function duzenlenenSenaryo(onceki: SenaryoSonucu, ilan: Ilan, yeni: unknown): SenaryoSonucu {
+  const tablo = yerTutucuTablosu(ilan);
+  const sonuc = senaryoyuDogrula(yeni, { ilan, tablo });
+  if (!sonuc.senaryo) {
+    throw new SenaryoHatasi(`Düzenlenen senaryo kurallara uymuyor:\n${sonuc.hatalar.map((h) => `  - ${h}`).join("\n")}`, sonuc.hatalar);
+  }
+  const degisti = JSON.stringify(sonuc.senaryo) !== JSON.stringify(onceki.senaryo);
+  const { denemeler, onbellektenMi, saglayici } = onceki;
+  return sonucKur(sonuc.senaryo, tablo, { denemeler, onbellektenMi, saglayici, duzenlendi: onceki.duzenlendi || degisti });
 }
 
 type UretimSecenekleri = {
@@ -90,18 +124,7 @@ export async function senaryoUret(secenekler: UretimSecenekleri): Promise<Senary
     ? path.join(secenekler.onbellekKlasoru, `senaryo-${anahtar.slice(0, 16)}.json`)
     : undefined;
 
-  const sonucKur = (senaryo: YzSenaryo, denemeler: DenemeKaydi[], onbellektenMi: boolean): SenaryoSonucu => {
-    const adlar = new Set(senaryo.sahneler.flatMap((s) => yerTutuculariBul(`${s.baslik} ${s.disSes}`)) as YerTutucu[]);
-    return {
-      senaryo,
-      sahneler: sahnelereDonustur(senaryo, tablo),
-      kullanilanYerTutucular: [...adlar].map((ad) => ({ ad, ...tablo[ad]! })),
-      denemeler,
-      toplamMaliyetUsd: denemeler.reduce((t, d) => t + (d.kullanim?.tahminiMaliyetUsd ?? 0), 0),
-      onbellektenMi,
-      saglayici: saglayici.kimlik,
-    };
-  };
+  const bilgi = (denemeler: DenemeKaydi[], onbellektenMi: boolean) => ({ denemeler, onbellektenMi, saglayici: saglayici.kimlik, duzenlendi: false });
 
   if (onbellekYolu && !secenekler.zorla) {
     try {
@@ -110,7 +133,7 @@ export async function senaryoUret(secenekler: UretimSecenekleri): Promise<Senary
       const sonuc = senaryoyuDogrula(kayit.cikti, baglam);
       if (sonuc.senaryo) {
         bildir("Senaryo önbellekten alındı, API çağrısı yapılmadı.");
-        return sonucKur(sonuc.senaryo, [], true);
+        return sonucKur(sonuc.senaryo, tablo, bilgi([], true));
       }
     } catch {
       // Önbellek yok veya okunamadı.
@@ -135,7 +158,7 @@ export async function senaryoUret(secenekler: UretimSecenekleri): Promise<Senary
         await mkdir(path.dirname(onbellekYolu), { recursive: true });
         await writeFile(onbellekYolu, JSON.stringify({ saglayici: saglayici.kimlik, cikti: sonuc.senaryo }, null, 2));
       }
-      return sonucKur(sonuc.senaryo, denemeler, false);
+      return sonucKur(sonuc.senaryo, tablo, bilgi(denemeler, false));
     }
     for (const h of sonuc.hatalar) bildir(`  ✗ ${h}`);
     duzeltme = { oncekiCikti: yanit.cikti, hatalar: sonuc.hatalar };

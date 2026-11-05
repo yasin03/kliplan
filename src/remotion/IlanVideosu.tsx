@@ -11,6 +11,7 @@ import { OfisRozeti } from "./bilesenler/OfisRozeti.js";
 import { sahneKareSayisi } from "./hesap.js";
 import { tema } from "./tema.js";
 import type { Sahne, VideoProps } from "./tipler.js";
+import { VurguRengi } from "./vurgu.js";
 
 const { guvenliAlan } = tema;
 
@@ -89,23 +90,22 @@ const FonMuzigi: React.FC<{ src: string }> = ({ src }) => {
 export const IlanVideosu: React.FC<VideoProps> = (props) => {
   const { sahneler } = props;
   return (
-    <AbsoluteFill lang="tr" style={{ background: tema.renkler.lacivertKoyu, fontFamily: `${tema.yazi.aile}, sans-serif` }}>
-      <TransitionSeries>
-        {sahneler.map((sahne, sira) => (
-          <Fragment key={sira}>
-            {sira > 0 ? (
-              <TransitionSeries.Transition
-                presentation={fade()}
-                timing={linearTiming({ durationInFrames: tema.hareket.gecisKare })}
-              />
-            ) : null}
-            <TransitionSeries.Sequence durationInFrames={sahneKareSayisi(sahne)} name={`${sira + 1}. ${sahne.baslik}`}>
-              <SahneGorunumu sahne={sahne} sira={sira} kapanis={sira === sahneler.length - 1} props={props} />
-            </TransitionSeries.Sequence>
-          </Fragment>
-        ))}
-      </TransitionSeries>
-      {props.muzik ? <FonMuzigi src={props.muzik} /> : null}
-    </AbsoluteFill>
+    <VurguRengi.Provider value={props.vurguRengi ?? tema.renkler.vurgu}>
+      <AbsoluteFill lang="tr" style={{ background: tema.renkler.lacivertKoyu, fontFamily: `${tema.yazi.aile}, sans-serif` }}>
+        <TransitionSeries>
+          {sahneler.map((sahne, sira) => (
+            <Fragment key={sira}>
+              {sira > 0 ? (
+                <TransitionSeries.Transition presentation={fade()} timing={linearTiming({ durationInFrames: tema.hareket.gecisKare })} />
+              ) : null}
+              <TransitionSeries.Sequence durationInFrames={sahneKareSayisi(sahne)} name={`${sira + 1}. ${sahne.baslik}`}>
+                <SahneGorunumu sahne={sahne} sira={sira} kapanis={sira === sahneler.length - 1} props={props} />
+              </TransitionSeries.Sequence>
+            </Fragment>
+          ))}
+        </TransitionSeries>
+        {props.muzik ? <FonMuzigi src={props.muzik} /> : null}
+      </AbsoluteFill>
+    </VurguRengi.Provider>
   );
 };

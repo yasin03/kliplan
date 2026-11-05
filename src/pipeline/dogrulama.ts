@@ -3,8 +3,10 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { alanYolu, turkceHataHaritasi } from "../schema/hatalar.js";
+import { tema } from "../remotion/tema.js";
 import { ilanSemasi, type Ilan } from "../schema/ilan.js";
 import { KontrolRaporu } from "./kontrolRaporu.js";
+import { EN_AZ_KONTRAST, kontrastOrani } from "./renk.js";
 
 export const ILAN_DOSYASI = "ilan.json";
 export const FOTOGRAF_KLASORU = "fotograflar";
@@ -39,7 +41,7 @@ export function ilanVerisiniDogrula(veri: unknown, rapor: KontrolRaporu): Ilan |
   return sonuc.data;
 }
 
-/** Onaysız, eksik veya kendi içinde çelişkili bilgileri uyarı olarak rapora ekler. */
+/** Onaysız, eksik veya kendi içinde çelişkili bilgileri uyarı, okunamayacak vurgu rengini hata olarak rapora ekler. */
 export function tutarlilikKontrolu(ilan: Ilan, rapor: KontrolRaporu): void {
   const onaysizlar: [string, boolean][] = [
     ["Yetki belge numarası", ilan.yetkiBelgeNo.onayli],
@@ -63,6 +65,16 @@ export function tutarlilikKontrolu(ilan: Ilan, rapor: KontrolRaporu): void {
   }
   if (ilan.bulunduguKat > ilan.katSayisi) {
     rapor.uyari("Kat", `Bulunduğu kat (${ilan.bulunduguKat}) bina kat sayısından (${ilan.katSayisi}) büyük.`);
+  }
+
+  if (ilan.vurguRengi) {
+    const oran = kontrastOrani(ilan.vurguRengi, tema.renkler.lacivert);
+    if (oran < EN_AZ_KONTRAST) {
+      rapor.hata(
+        "Vurgu rengi",
+        `${ilan.vurguRengi} lacivert zemin üzerinde okunmuyor (kontrast ${oran.toFixed(1)}:1, en az ${EN_AZ_KONTRAST}:1 olmalı). Daha açık bir renk seçin.`,
+      );
+    }
   }
 }
 

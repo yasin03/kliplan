@@ -11,6 +11,8 @@ export type UretimRaporuVerisi = {
   test: boolean;
   senaryoSaglayici: string;
   sesSaglayici: string;
+  /** Yapay zeka metni elle düzenlendiyse raporda belirtilir. */
+  senaryoDuzenlendi?: boolean | undefined;
   sahneler: Sahne[];
   kullanilanYerTutucular: (YerTutucuDegeri & { ad: YerTutucu })[];
   iletisim: Iletisim;
@@ -38,7 +40,7 @@ export function uretimRaporu(v: UretimRaporuVerisi): string {
   }
   ekle(
     `- Üretim: ${v.tarih.toLocaleString("tr-TR")}`,
-    `- Senaryo: \`${v.senaryoSaglayici}\` · Ses: \`${v.sesSaglayici}\``,
+    `- Senaryo: \`${v.senaryoSaglayici}\`${v.senaryoDuzenlendi ? " (elle düzenlendi, kurallarla yeniden doğrulandı)" : ""} · Ses: \`${v.sesSaglayici}\``,
     "",
     "## Videodaki kritik bilgiler",
     "",

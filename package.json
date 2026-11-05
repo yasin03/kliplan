@@ -9,7 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . && tsc --noEmit",
+    "lint": "eslint . && tsc --noEmit && npm run typecheck -w @kliplan/web",
     "test": "vitest run",
     "test:watch": "vitest",
     "dogrula": "tsx src/cli/dogrula.ts",
@@ -17,7 +17,11 @@
     "render:ornek": "tsx src/cli/ornekRender.ts",
     "senaryo": "tsx src/cli/senaryo.ts",
     "ses": "tsx src/cli/ses.ts",
-    "video": "tsx src/cli/video.ts"
+    "video": "tsx src/cli/video.ts",
+    "kullanici-ekle": "tsx src/cli/kullaniciEkle.ts",
+    "db:uret": "drizzle-kit generate",
+    "db:uygula": "drizzle-kit migrate",
+    "web": "npm run dev -w @kliplan/web"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.4.0",
@@ -28,9 +32,12 @@
     "@remotion/layout-utils": "4.0.540",
     "@remotion/renderer": "4.0.540",
     "@remotion/transitions": "4.0.540",
+    "better-auth": "1.7.17",
     "commander": "15.0.0",
     "dotenv": "18.0.9",
+    "drizzle-orm": "0.45.4",
     "microsoft-cognitiveservices-speech-sdk": "1.52.0",
+    "pg": "8.23.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "remotion": "4.0.540",
@@ -40,12 +47,17 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "26.6.6",
+    "@types/pg": "8.23.1",
     "@types/react": "19.3.0",
+    "drizzle-kit": "0.31.11",
     "eslint": "10.14.0",
     "globals": "17.14.0",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.1",
     "vitest": "5.1.0"
-  }
+  },
+  "workspaces": [
+    "web"
+  ]
 }

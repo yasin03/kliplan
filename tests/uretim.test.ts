@@ -2,7 +2,8 @@ import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { AdimHatasi, videoUret } from "../src/pipeline/uretim.js";
+import { SenaryoHatasi, duzenlenenSenaryo } from "../src/pipeline/senaryoUretimi.js";
+import { AdimHatasi, ilanHazirla, senaryoAsamasi, videoAsamasi, videoUret } from "../src/pipeline/uretim.js";
 import type { videoyuRenderEt } from "../src/pipeline/render.js";
 import { MockScriptProvider } from "../src/providers/MockScriptProvider.js";
 import { MockTtsProvider } from "../src/providers/MockTtsProvider.js";
@@ -137,5 +138,56 @@ describe("uçtan uca üretim", () => {
     expect(rapor).toContain("Kazımdirik, Bornova / İzmir");
     expect(rapor).toContain("Defne Emlak'ı arayın");
     expect(rapor).not.toContain("Temurlar");
+  });
+});
+
+describe("aşamalı üretim (web akışı)", () => {
+  it("senaryoyu üretip durabiliyor, düzenlenen senaryoyla videoya devam ediyor", async () => {
+    const { temel, sesSaglayici } = await ortam();
+    const hazir = await ilanHazirla(temel);
+    const senaryo = await senaryoAsamasi(temel, hazir);
+    expect(sesSaglayici.istekler).toHaveLength(0);
+
+    const yeni = structuredClone(senaryo.senaryo);
+    yeni.sahneler[0]!.baslik = "Eşyalı ve krediye uygun";
+    const duzenlenen = duzenlenenSenaryo(senaryo, hazir.ilan, yeni);
+    expect(duzenlenen.duzenlendi).toBe(true);
+    expect(duzenlenen.sahneler[0]!.baslik).toBe("Eşyalı ve krediye uygun");
+
+    const render = sahteRender();
+    const sonuc = await videoAsamasi({ ...temel, renderEt: render.renderEt }, hazir, duzenlenen);
+    expect(render.cagrilar[0]!.props.sahneler[0]!.baslik).toBe("Eşyalı ve krediye uygun");
+    expect(await readFile(sonuc.raporYolu, "utf8")).toContain("(elle düzenlendi, kurallarla yeniden doğrulandı)");
+    expect(JSON.parse(await readFile(sonuc.senaryoYolu, "utf8"))).toMatchObject({ duzenlendi: true });
+  });
+
+  it("düzenlenen senaryoda rakam, abartı veya listede olmayan fotoğraf varsa reddediyor", async () => {
+    const { temel } = await ortam();
+    const hazir = await ilanHazirla(temel);
+    const senaryo = await senaryoAsamasi(temel, hazir);
+
+    const yeni = structuredClone(senaryo.senaryo);
+    yeni.sahneler[0]!.disSes = "Fiyatı 4 milyon, kaçırılmaz fırsat.";
+    yeni.sahneler[1]!.fotograf = "baska-ev.jpg";
+    const hata = (() => {
+      try {
+        duzenlenenSenaryo(senaryo, hazir.ilan, yeni);
+      } catch (e) {
+        return e;
+      }
+    })();
+    expect(hata).toBeInstanceOf(SenaryoHatasi);
+    const hatalar = (hata as SenaryoHatasi).hatalar.join("\n");
+    expect(hatalar).toMatch(/rakam kullanılamaz/);
+    expect(hatalar).toMatch(/fırsat/);
+    expect(hatalar).toMatch(/baska-ev\.jpg/);
+  });
+
+  it("değiştirilmeden geri gelen senaryoyu düzenlenmiş saymıyor", async () => {
+    const { temel } = await ortam();
+    const hazir = await ilanHazirla(temel);
+    const senaryo = await senaryoAsamasi(temel, hazir);
+    const geriOkunan = JSON.parse(JSON.stringify(senaryo.senaryo)) as unknown;
+    expect(duzenlenenSenaryo(senaryo, hazir.ilan, geriOkunan).duzenlendi).toBe(false);
   });
 });

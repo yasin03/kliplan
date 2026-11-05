@@ -4,13 +4,14 @@ import path from "node:path";
 import type { ScriptProvider } from "../providers/ScriptProvider.js";
 import { SaglayiciHatasi } from "../providers/ScriptProvider.js";
 import type { TtsProvider } from "../providers/TtsProvider.js";
-import type { VideoProps } from "../remotion/tipler.js";
+import type { Iletisim, VideoProps } from "../remotion/tipler.js";
+import type { Ilan } from "../schema/ilan.js";
 import { ilanKlasorunuDogrula } from "./dogrulama.js";
-import { fotograflariHazirla } from "./fotografHazirlama.js";
+import { fotograflariHazirla, type HazirlikSonucu } from "./fotografHazirlama.js";
 import type { RaporMaddesi } from "./kontrolRaporu.js";
 import type { RenderSonucu, videoyuRenderEt } from "./render.js";
 import { ONERILEN_EN_FAZLA_SURE_SN, sahneleriSeslendir } from "./seslendirme.js";
-import { SenaryoHatasi, senaryoUret } from "./senaryoUretimi.js";
+import { SenaryoHatasi, type SenaryoSonucu, senaryoUret } from "./senaryoUretimi.js";
 import { telaffuzSozlugu } from "./telaffuz.js";
 import { uretimRaporu } from "./uretimRaporu.js";
 import { iletisimBilgisi, videoPropsOlustur } from "./videoProps.js";
@@ -47,6 +48,15 @@ export type UretimSecenekleri = {
   bildir?: (mesaj: string) => void;
   /** Render ilerlemesi (0-1). */
   ilerleme?: (oran: number) => void;
+};
+
+/** Adım 1-2'nin sonucu: doğrulanmış ilan ve Remotion için hazırlanmış dosyalar. */
+export type HazirIlan = {
+  ilan: Ilan;
+  /** Doğrulama ve sonraki adımların rapora girecek maddeleri. */
+  maddeler: RaporMaddesi[];
+  iletisim: Iletisim;
+  hazirlik: HazirlikSonucu;
 };
 
 export type UretimSonucu = {
@@ -115,11 +125,13 @@ async function adim<T>(sira: number, ad: string, cozum: string | ((hata: unknown
   }
 }
 
-export async function videoUret(s: UretimSecenekleri): Promise<UretimSonucu> {
-  const bildir = s.bildir ?? (() => {});
+const sessiz = () => {};
+const publicKlasoruBul = (onbellekKlasoru: string) => path.join(onbellekKlasoru, "public");
+
+/** Adım 1-2: ilanı doğrular, fotoğrafları hazırlar. API çağrısı yapmaz. */
+export async function ilanHazirla(s: Pick<UretimSecenekleri, "klasor" | "onbellekKlasoru" | "bildir">): Promise<HazirIlan> {
+  const bildir = s.bildir ?? sessiz;
   const { klasor } = s;
-  const publicKlasoru = path.join(s.onbellekKlasoru, "public");
-  await mkdir(s.ciktiKlasoru, { recursive: true });
 
   bildir(`1/${ADIM_SAYISI} İlan doğrulanıyor…`);
   const dogrulama = await adim(1, "Doğrulama", `ilan.json'u ve fotoğrafları düzeltin. Ayrıntılı liste için: npm run dogrula -- ${klasor}`, async () => {
@@ -129,16 +141,23 @@ export async function videoUret(s: UretimSecenekleri): Promise<UretimSonucu> {
     return { ilan, rapor, iletisim: iletisimBilgisi(ilan) };
   });
   const { ilan } = dogrulama;
-  const maddeler: RaporMaddesi[] = [...dogrulama.rapor.maddeler];
   for (const u of dogrulama.rapor.uyarilar) bildir(`  ⚠ ${u.alan}: ${u.mesaj}`);
 
   bildir(`2/${ADIM_SAYISI} Fotoğraflar hazırlanıyor…`);
   const hazirlik = await adim(2, "Fotoğraflar", "Fotoğraf dosyalarının açılabildiğini kontrol edin; dosya bozuk veya desteklenmeyen biçimde olabilir.", () =>
-    fotograflariHazirla(klasor, ilan, publicKlasoru),
+    fotograflariHazirla(klasor, ilan, publicKlasoruBul(s.onbellekKlasoru)),
   );
+  return { ilan, maddeler: [...dogrulama.rapor.maddeler], iletisim: dogrulama.iletisim, hazirlik };
+}
 
+/** Adım 3: yapay zekayla senaryo üretir (önbellekte varsa API'ye gitmez). Web'de sonuç kullanıcıya düzenlemeye açılır. */
+export async function senaryoAsamasi(
+  s: Pick<UretimSecenekleri, "senaryoSaglayici" | "onbellekKlasoru" | "zorla" | "bildir">,
+  { ilan }: HazirIlan,
+): Promise<SenaryoSonucu> {
+  const bildir = s.bildir ?? sessiz;
   bildir(`3/${ADIM_SAYISI} Senaryo üretiliyor…`);
-  const senaryo = await adim(
+  return adim(
     3,
     "Senaryo",
     (hata) =>
@@ -149,6 +168,22 @@ export async function videoUret(s: UretimSecenekleri): Promise<UretimSonucu> {
           : "Hata ayrıntısını kontrol edip komutu yeniden çalıştırın.",
     () => senaryoUret({ ilan, saglayici: s.senaryoSaglayici, onbellekKlasoru: s.onbellekKlasoru, zorla: s.zorla, bildir: (m) => bildir(`  ${m}`) }),
   );
+}
+
+/**
+ * Adım 4-6: senaryoyu seslendirir, videoyu render eder, senaryo.json ve kontrol raporunu yazar.
+ * Elle düzenlenen senaryo buraya gelmeden önce `duzenlenenSenaryo` ile yeniden doğrulanmalıdır.
+ */
+export async function videoAsamasi(
+  s: Omit<UretimSecenekleri, "klasor" | "senaryoSaglayici">,
+  hazir: HazirIlan,
+  senaryo: SenaryoSonucu,
+): Promise<UretimSonucu> {
+  const bildir = s.bildir ?? sessiz;
+  const { ilan, hazirlik } = hazir;
+  const maddeler = [...hazir.maddeler];
+  const publicKlasoru = publicKlasoruBul(s.onbellekKlasoru);
+  await mkdir(s.ciktiKlasoru, { recursive: true });
 
   bildir(`4/${ADIM_SAYISI} Dış ses üretiliyor…`);
   const ses = await adim(
@@ -231,6 +266,7 @@ export async function videoUret(s: UretimSecenekleri): Promise<UretimSonucu> {
           sesSaglayici: ses.saglayici,
           test: Boolean(s.test),
           onbellektenMi: senaryo.onbellektenMi,
+          duzenlendi: senaryo.duzenlendi,
           tahminiMaliyetUsd: { senaryo: senaryo.toplamMaliyetUsd, ses: ses.tahminiMaliyetUsd, toplam: toplamMaliyetUsd },
           kullanilanKritikBilgiler: senaryo.kullanilanYerTutucular,
           denemeler: senaryo.denemeler,
@@ -253,7 +289,8 @@ export async function videoUret(s: UretimSecenekleri): Promise<UretimSonucu> {
         sesSaglayici: ses.saglayici,
         sahneler: ses.sahneler,
         kullanilanYerTutucular: senaryo.kullanilanYerTutucular,
-        iletisim: dogrulama.iletisim,
+        iletisim: hazir.iletisim,
+        senaryoDuzenlendi: senaryo.duzenlendi,
         maddeler,
         sureSn: render.sureSn,
         dosyaBoyutuBayt,
@@ -280,4 +317,11 @@ export async function videoUret(s: UretimSecenekleri): Promise<UretimSonucu> {
       renderOnbellekten: render.onbellekten,
     };
   });
+}
+
+/** CLI akışı: altı adımı art arda çalıştırır. */
+export async function videoUret(s: UretimSecenekleri): Promise<UretimSonucu> {
+  const hazir = await ilanHazirla(s);
+  const senaryo = await senaryoAsamasi(s, hazir);
+  return videoAsamasi(s, hazir, senaryo);
 }
