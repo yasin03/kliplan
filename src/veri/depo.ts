@@ -1,8 +1,11 @@
-import { and, asc, desc, eq, max, ne } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, max, ne, or } from "drizzle-orm";
 import type { Veritabani } from "../db/baglanti.js";
-import { fotograf, ilan, type KayitliHata, ofis, uretimIsi, video } from "../db/sema.js";
-import { anahtariDogrula, type Depolama, ilanOneki } from "../depolama/Depolama.js";
-import { EN_FAZLA_FOTOGRAF } from "./fotografIsleme.js";
+import { fotograf, ilan, type KayitliHata, muzik, ofis, type Secim, sirketResmi, uretimIsi, user, video } from "../db/sema.js";
+import { anahtariDogrula, type Depolama, ilanOneki, KUTUPHANE_ONEKI, ofisOneki } from "../depolama/Depolama.js";
+import type { TemaAdi } from "../remotion/temalar.js";
+import { EN_FAZLA_FOTOGRAF, type IslenmisFotograf } from "./fotografIsleme.js";
+import { ilanMuzikId, ilanResimId, MUZIK_BEYANI, muzikKullanilabilir, type OfisAyarlari } from "./gorunum.js";
+import type { IslenmisLogo, IslenmisMuzik } from "./gorunumIsleme.js";
 import { BulunamadiHatasi, dosyayaErisebilirMi, ErisimHatasi, hedefOfis, ofisKosulu, type Yetki } from "./yetki.js";
 
 /** Bağlantılar kısa ömürlü; sayfa yenilendikçe yeniden üretilir. */
@@ -10,6 +13,31 @@ export const BAGLANTI_SURESI_SN = 10 * 60;
 
 export type IlanGuncellemesi = Partial<Pick<typeof ilan.$inferInsert, "veri" | "senaryo" | "durum" | "hata">>;
 export type YeniFotograf = { dosyaAdi: string; tur: string; icerik: Buffer; icerikTuru: string; genislik: number; yukseklik: number };
+export type YeniMuzik = {
+  ad: string;
+  lisans: string;
+  /** Hazır kütüphaneye (yalnızca admin) veya ofisin kendi müziklerine. */
+  kutuphane: boolean;
+  /** Ofis yüklemesinde ticari kullanım beyanı onaylanmış olmalı. */
+  beyanOnayi: boolean;
+  dosya: IslenmisMuzik;
+};
+export type IlanGorunumSecimi = {
+  tema: TemaAdi | null;
+  muzikSecimi: Secim;
+  muzikId: string | null;
+  /** Verilmezse mevcut kapanış resmi seçimi korunur. */
+  resimSecimi?: Secim | undefined;
+  resimId?: string | null | undefined;
+};
+
+export const EN_FAZLA_SIRKET_RESMI = 12;
+
+/** Anahtar sırasından bağımsız JSON; PostgreSQL `jsonb` anahtarları kendi sırasına dizer. */
+const siraliJson = (deger: unknown): string =>
+  JSON.stringify(deger, (_, d: unknown) =>
+    d && typeof d === "object" && !Array.isArray(d) ? Object.fromEntries(Object.entries(d).sort(([x], [y]) => x.localeCompare(y))) : d,
+  );
 
 /** Kullanıcının düzeltebileceği durum hataları; mesaj olduğu gibi gösterilir. */
 export class DuzenlemeHatasi extends Error {}
@@ -37,6 +65,53 @@ export function depoOlustur(db: Veritabani, yetki: Yetki, depolama: Depolama) {
     return kayit;
   }
 
+  /** Ayarları düzenlenecek ofis: üye için kendi ofisi, admin için seçtiği ofis. */
+  async function ofisKaydi(ofisId?: string) {
+    const kayit = await db.query.ofis.findFirst({ where: eq(ofis.id, hedefOfis(yetki, ofisId)) });
+    if (!kayit) throw new BulunamadiHatasi("Şirket bulunamadı.");
+    return kayit;
+  }
+
+  /** Kütüphanedeki müzikleri herkes, ofis yüklemelerini yalnızca o ofis (ve admin) görür. */
+  async function muzikBul(id: string) {
+    const kosul = yetki.admin ? undefined : or(isNull(muzik.ofisId), ofisKosulu(yetki, muzik.ofisId));
+    const kayit = await db.query.muzik.findFirst({ where: and(eq(muzik.id, id), kosul) });
+    if (!kayit) throw new BulunamadiHatasi("Müzik bulunamadı.");
+    return kayit;
+  }
+
+  /** Ofiste kullanılabilecek müzik mi (kütüphane veya kendi yüklemesi)? Değilse kullanıcı hatası. */
+  async function secilebilirMuzik(id: string, ofisId: string) {
+    const kayit = await db.query.muzik.findFirst({ where: eq(muzik.id, id) });
+    if (!kayit || !muzikKullanilabilir(kayit, ofisId)) throw new DuzenlemeHatasi("Seçilen müzik bulunamadı; silinmiş olabilir. Sayfayı yenileyin.");
+    return kayit;
+  }
+
+  /** Şirketin kendi resmi mi? Değilse kullanıcı hatası. */
+  async function secilebilirResim(id: string, ofisId: string) {
+    const kayit = await db.query.sirketResmi.findFirst({ where: and(eq(sirketResmi.id, id), eq(sirketResmi.ofisId, ofisId)) });
+    if (!kayit) throw new DuzenlemeHatasi("Seçilen şirket resmi bulunamadı; silinmiş olabilir. Sayfayı yenileyin.");
+    return kayit;
+  }
+
+  /** Seçilen müzik ve resim şirkete ait mi; "secili" değilse kimlik boşaltılır. Resim seçimi verilmezse `mevcut` korunur. */
+  async function gorunumSeciminiDogrula(secim: IlanGorunumSecimi, ofisId: string, mevcut?: { resimSecimi: Secim; resimId: string | null }) {
+    const muzikId = secim.muzikSecimi === "secili" ? secim.muzikId : null;
+    if (secim.muzikSecimi === "secili") {
+      if (!muzikId) throw new DuzenlemeHatasi("Bir müzik seçin.");
+      await secilebilirMuzik(muzikId, ofisId);
+    }
+    // Seçim verilmediyse mevcut korunur; mevcut seçili resim silinmişse (kimlik boşaldı) şirket varsayılanına geçilir.
+    const korunan = mevcut?.resimSecimi === "secili" && !mevcut.resimId ? "ofis" : mevcut?.resimSecimi;
+    const resimSecimi = secim.resimSecimi ?? korunan ?? "ofis";
+    const resimId = resimSecimi === "secili" ? (secim.resimSecimi ? (secim.resimId ?? null) : (mevcut?.resimId ?? null)) : null;
+    if (resimSecimi === "secili") {
+      if (!resimId) throw new DuzenlemeHatasi("Bir şirket resmi seçin.");
+      await secilebilirResim(resimId, ofisId);
+    }
+    return { tema: secim.tema, muzikSecimi: secim.muzikSecimi, muzikId, resimSecimi, resimId };
+  }
+
   /** Bilgi veya fotoğraf değişecekse çağrılır. Üretim sürerken değişikliğe izin verilmez. */
   async function duzenlenecekIlan(id: string) {
     const kayit = await ilanBul(id);
@@ -60,6 +135,174 @@ export function depoOlustur(db: Veritabani, yetki: Yetki, depolama: Depolama) {
       return db.query.ofis.findMany({ where: ofisKosulu(yetki, ofis.id), columns: { id: true, ad: true }, orderBy: asc(ofis.ad) });
     },
 
+    ayarlanacakOfis: ofisKaydi,
+
+    /**
+     * Şirket bilgileri ve görünüm varsayılanları; verilen alanlar güncellenir. Yalnızca bundan sonra üretilen videolara uygulanır.
+     * Ad başka bir şirkette varsa kaydedilmez (`kullanici-ekle --ofis` şirketi adıyla bulur). Ad değiştiyse eski ad döner:
+     * kayıtlı senaryolar eski adı içerir, panel uyarır.
+     */
+    async ofisAyarlariniKaydet(ayarlar: Partial<OfisAyarlari>, ofisId?: string): Promise<{ eskiAd: string | null }> {
+      const kayit = await ofisKaydi(ofisId);
+      if (ayarlar.varsayilanMuzikId) await secilebilirMuzik(ayarlar.varsayilanMuzikId, kayit.id);
+      if (ayarlar.varsayilanResimId) await secilebilirResim(ayarlar.varsayilanResimId, kayit.id);
+      const adDegisti = ayarlar.ad !== undefined && ayarlar.ad !== kayit.ad;
+      if (adDegisti && (await db.query.ofis.findFirst({ where: and(eq(ofis.ad, ayarlar.ad!), ne(ofis.id, kayit.id)), columns: { id: true } }))) {
+        throw new DuzenlemeHatasi(`"${ayarlar.ad}" adıyla başka bir şirket kayıtlı. Farklı bir ad yazın.`);
+      }
+      await db.update(ofis).set(ayarlar).where(eq(ofis.id, kayit.id));
+      return { eskiAd: adDegisti ? kayit.ad : null };
+    },
+
+    /** Şirketin resimleri, yüklenme sırasıyla. Admin ofis belirtmeli. */
+    async resimler(ofisId?: string) {
+      const hedef = hedefOfis(yetki, ofisId);
+      return db.query.sirketResmi.findMany({ where: eq(sirketResmi.ofisId, hedef), orderBy: asc(sirketResmi.olusturma) });
+    },
+
+    /** Resmi yazar ve kaydeder; kayıt başarısız olursa dosya silinir. En fazla `EN_FAZLA_SIRKET_RESMI`. */
+    async resimEkle(resim: Pick<IslenmisFotograf, "dosyaAdi" | "icerik" | "icerikTuru" | "genislik" | "yukseklik">, ofisId?: string) {
+      const hedef = hedefOfis(yetki, ofisId);
+      if ((await db.$count(sirketResmi, eq(sirketResmi.ofisId, hedef))) >= EN_FAZLA_SIRKET_RESMI) {
+        throw new DuzenlemeHatasi(`En fazla ${EN_FAZLA_SIRKET_RESMI} şirket resmi yüklenebilir. Yenisi için birini silin.`);
+      }
+      const anahtar = anahtariDogrula(`${ofisOneki(hedef)}resim/${resim.dosyaAdi}`);
+      await depolama.yaz(anahtar, resim.icerik, resim.icerikTuru);
+      try {
+        const [kayit] = await db.insert(sirketResmi).values({ ofisId: hedef, anahtar, genislik: resim.genislik, yukseklik: resim.yukseklik }).returning();
+        return kayit!;
+      } catch (hata) {
+        await depolama.sil(anahtar);
+        throw hata;
+      }
+    },
+
+    /** Kullanan ilanlar şirketin varsayılanına, varsayılan olarak seçen şirket "resim yok"a döner. Üretilmiş videolar değişmez. */
+    async resimSil(id: string) {
+      const kayit = await db.query.sirketResmi.findFirst({ where: and(eq(sirketResmi.id, id), ofisKosulu(yetki, sirketResmi.ofisId)) });
+      if (!kayit) throw new BulunamadiHatasi("Resim bulunamadı.");
+      await db.delete(sirketResmi).where(eq(sirketResmi.id, kayit.id));
+      await depolama.sil(kayit.anahtar);
+    },
+
+    /** İlanın kapanış arka planı olacak resim (ilanın seçimi veya şirketin varsayılanı); yoksa `null`. */
+    async ilanResmi(ilanId: string) {
+      const kayit = await ilanBul(ilanId);
+      const sahip = (await db.query.ofis.findFirst({ where: eq(ofis.id, kayit.ofisId) }))!;
+      const id = ilanResimId(sahip, kayit);
+      if (!id) return null;
+      return (await db.query.sirketResmi.findFirst({ where: and(eq(sirketResmi.id, id), eq(sirketResmi.ofisId, kayit.ofisId)) })) ?? null;
+    },
+
+    /** Yeni logoyu yazar, eskisini siler. */
+    async logoKaydet(logo: Pick<IslenmisLogo, "dosyaAdi" | "icerik" | "icerikTuru">, ofisId?: string) {
+      const kayit = await ofisKaydi(ofisId);
+      const anahtar = anahtariDogrula(`${ofisOneki(kayit.id)}logo/${logo.dosyaAdi}`);
+      await depolama.yaz(anahtar, logo.icerik, logo.icerikTuru);
+      try {
+        await db.update(ofis).set({ logoAnahtari: anahtar }).where(eq(ofis.id, kayit.id));
+      } catch (hata) {
+        await depolama.sil(anahtar);
+        throw hata;
+      }
+      if (kayit.logoAnahtari) await depolama.sil(kayit.logoAnahtari);
+    },
+
+    async logoSil(ofisId?: string) {
+      const kayit = await ofisKaydi(ofisId);
+      if (!kayit.logoAnahtari) return;
+      await db.update(ofis).set({ logoAnahtari: null }).where(eq(ofis.id, kayit.id));
+      await depolama.sil(kayit.logoAnahtari);
+    },
+
+    /**
+     * Seçilebilecek müzikler: kütüphane ve ofisin kendi yüklemeleri. Admin ofis belirtmezse bütün ofislerin yüklemelerini de görür.
+     * Kütüphane önce gelir.
+     */
+    async muzikler(ofisId?: string) {
+      const hedef = yetki.admin && !ofisId ? null : hedefOfis(yetki, ofisId);
+      const kosul = hedef ? or(isNull(muzik.ofisId), eq(muzik.ofisId, hedef)) : undefined;
+      const liste = await db.query.muzik.findMany({ where: kosul, orderBy: [asc(muzik.ad), asc(muzik.olusturma)] });
+      return liste.sort((x, y) => Number(x.ofisId !== null) - Number(y.ofisId !== null));
+    },
+
+    muzik: muzikBul,
+
+    /** Kütüphaneye yalnızca admin ekler. Ofis yüklemesinde beyan metni, beyan eden ve zaman saklanır. */
+    async muzikEkle(yeni: YeniMuzik, ofisId?: string) {
+      const ad = yeni.ad.trim();
+      const lisans = yeni.lisans.trim();
+      if (!ad || ad.length > 80) throw new DuzenlemeHatasi("Müziğe 80 karakteri geçmeyen bir ad verin.");
+      if (!lisans || lisans.length > 500) throw new DuzenlemeHatasi("Lisans bilgisini yazın (lisans adı, satın alma bağlantısı veya sözleşme no; en fazla 500 karakter).");
+
+      let hedef: string | null = null;
+      let beyan: { beyan: string; beyanEdenId: string; beyanEdenAd: string } | null = null;
+      if (yeni.kutuphane) {
+        if (!yetki.admin) throw new ErisimHatasi("Kütüphaneye yalnızca yönetici müzik ekleyebilir.");
+      } else {
+        hedef = hedefOfis(yetki, ofisId);
+        if (!yeni.beyanOnayi) throw new DuzenlemeHatasi("Yüklemek için ticari kullanım beyanını onaylayın.");
+        const kullanici = await db.query.user.findFirst({ where: eq(user.id, yetki.kullaniciId), columns: { name: true } });
+        beyan = { beyan: MUZIK_BEYANI, beyanEdenId: yetki.kullaniciId, beyanEdenAd: kullanici?.name ?? yetki.kullaniciId };
+      }
+
+      const anahtar = anahtariDogrula(`${hedef ? ofisOneki(hedef) : KUTUPHANE_ONEKI}muzik/${yeni.dosya.dosyaAdi}`);
+      await depolama.yaz(anahtar, yeni.dosya.icerik, yeni.dosya.icerikTuru);
+      try {
+        const [kayit] = await db
+          .insert(muzik)
+          .values({
+            ofisId: hedef,
+            ad,
+            lisans,
+            anahtar,
+            icerikTuru: yeni.dosya.icerikTuru,
+            sureSn: yeni.dosya.sureSn,
+            boyutBayt: yeni.dosya.icerik.length,
+            ...beyan,
+          })
+          .returning();
+        return kayit!;
+      } catch (hata) {
+        await depolama.sil(anahtar);
+        throw hata;
+      }
+    },
+
+    /**
+     * Kütüphane müziğini yalnızca admin, ofis müziğini o ofis siler. Kullanan ilanlar ofisin varsayılanına,
+     * varsayılan olarak seçen ofisler müziksize döner. Üretilmiş videolar değişmez.
+     */
+    async muzikSil(id: string) {
+      const kayit = await muzikBul(id);
+      if (kayit.ofisId === null && !yetki.admin) throw new ErisimHatasi("Kütüphanedeki müziği yalnızca yönetici silebilir.");
+      await db.delete(muzik).where(eq(muzik.id, kayit.id));
+      await depolama.sil(kayit.anahtar);
+    },
+
+    /** Dinleme bağlantısı. */
+    async muzikBaglantisi(id: string) {
+      return depolama.imzaliBaglanti((await muzikBul(id)).anahtar, BAGLANTI_SURESI_SN);
+    },
+
+    /** İlanda çalacak müzik (ilanın seçimi veya ofisin varsayılanı); müziksizse `null`. */
+    async ilanMuzigi(ilanId: string) {
+      const kayit = await ilanBul(ilanId);
+      const sahip = (await db.query.ofis.findFirst({ where: eq(ofis.id, kayit.ofisId) }))!;
+      const id = ilanMuzikId(sahip, kayit);
+      if (!id) return null;
+      const m = await db.query.muzik.findFirst({ where: eq(muzik.id, id) });
+      return m && muzikKullanilabilir(m, kayit.ofisId) ? m : null;
+    },
+
+    /** İlanın teması, müziği ve kapanış resmi. Değişirse eski video geçerliliğini yitirir ve ilan taslağa döner; senaryo korunur. */
+    async ilanGorunumunuKaydet(ilanId: string, secim: IlanGorunumSecimi) {
+      const kayit = await duzenlenecekIlan(ilanId);
+      const yeni = await gorunumSeciminiDogrula(secim, kayit.ofisId, kayit);
+      if (kayit.tema === yeni.tema && kayit.muzikSecimi === yeni.muzikSecimi && kayit.muzikId === yeni.muzikId && kayit.resimSecimi === yeni.resimSecimi && kayit.resimId === yeni.resimId) return;
+      await db.update(ilan).set({ ...yeni, durum: "taslak", hata: null }).where(eq(ilan.id, ilanId));
+    },
+
     /** İlanın ofisi; admin başka ofisin ilanına baktığında ofis adı buradan gelir. */
     async ilanOfisi(ilanId: string) {
       const kayit = await ilanBul(ilanId);
@@ -72,10 +315,13 @@ export function depoOlustur(db: Veritabani, yetki: Yetki, depolama: Depolama) {
 
     ilan: ilanBul,
 
-    async ilanOlustur(veri: Record<string, unknown>, ofisId?: string) {
+    /** Yeni ilan; görünüm seçimi verilmezse şirketin varsayılanları kullanılır. */
+    async ilanOlustur(veri: Record<string, unknown>, ofisId?: string, gorunum?: IlanGorunumSecimi) {
+      const hedef = hedefOfis(yetki, ofisId);
+      const secim = gorunum ? await gorunumSeciminiDogrula(gorunum, hedef) : {};
       const [kayit] = await db
         .insert(ilan)
-        .values({ ofisId: hedefOfis(yetki, ofisId), olusturanId: yetki.kullaniciId, veri })
+        .values({ ofisId: hedef, olusturanId: yetki.kullaniciId, veri, ...secim })
         .returning();
       return kayit!;
     },
@@ -90,9 +336,13 @@ export function depoOlustur(db: Veritabani, yetki: Yetki, depolama: Depolama) {
       return kayit;
     },
 
-    /** Formdan gelen bilgileri kaydeder. Senaryo ve durum sıfırlanır, çünkü eski senaryo eski bilgilere göre yazıldı. */
+    /**
+     * Formdan gelen bilgileri kaydeder. Bilgiler değiştiyse senaryo ve durum sıfırlanır, çünkü eski senaryo eski bilgilere göre yazıldı.
+     * Değişmediyse (ör. form yalnızca görünüm için kaydedildi) senaryoya dokunulmaz.
+     */
     async ilanBilgileriniKaydet(id: string, veri: Record<string, unknown>) {
-      await duzenlenecekIlan(id);
+      const mevcut = await duzenlenecekIlan(id);
+      if (siraliJson(mevcut.veri) === siraliJson(veri)) return mevcut;
       const [kayit] = await db.update(ilan).set({ veri, senaryo: null, durum: "taslak", hata: null }).where(eq(ilan.id, id)).returning();
       return kayit!;
     },

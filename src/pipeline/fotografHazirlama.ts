@@ -23,6 +23,7 @@ export type HazirlikSonucu = {
   fotograflar: Record<string, HazirFotograf>;
   logo: string | null;
   muzik: string | null;
+  kapanisResmi: HazirFotograf | null;
 };
 
 /**
@@ -34,13 +35,9 @@ export async function fotograflariHazirla(ilanKlasoru: string, ilan: Ilan, publi
   await mkdir(ilanHedefi, { recursive: true });
   await cp(path.join(PROJE_KOKU, "public", "fontlar"), path.join(publicKlasoru, "fontlar"), { recursive: true });
 
-  const fotograflar: Record<string, HazirFotograf> = {};
-  for (const { dosya } of ilan.fotograflar) {
-    if (fotograflar[dosya]) continue;
-    const kaynak = path.join(ilanKlasoru, FOTOGRAF_KLASORU, dosya);
-    const hedefAdi = `${path.parse(dosya).name}.jpg`;
+  /** Döndürür (EXIF), küçültür, JPEG yapar; kaynak değişmediyse tekrar işlemez. */
+  async function hazirla(kaynak: string, hedefAdi: string): Promise<HazirFotograf> {
     const hedef = path.join(ilanHedefi, hedefAdi);
-
     if (!(await gunceldir(kaynak, hedef))) {
       await sharp(kaynak)
         .rotate()
@@ -50,8 +47,16 @@ export async function fotograflariHazirla(ilanKlasoru: string, ilan: Ilan, publi
         .toFile(hedef);
     }
     const { width, height } = await sharp(hedef).metadata();
-    fotograflar[dosya] = { src: `ilan/${hedefAdi}`, genislik: width, yukseklik: height };
+    return { src: `ilan/${hedefAdi}`, genislik: width, yukseklik: height };
   }
+
+  const fotograflar: Record<string, HazirFotograf> = {};
+  for (const { dosya } of ilan.fotograflar) {
+    if (fotograflar[dosya]) continue;
+    fotograflar[dosya] = await hazirla(path.join(ilanKlasoru, FOTOGRAF_KLASORU, dosya), `${path.parse(dosya).name}.jpg`);
+  }
+  // İlan fotoğraflarıyla çakışmasın diye ayrı ad.
+  const kapanisResmi = ilan.kapanisResmi ? await hazirla(path.join(ilanKlasoru, ilan.kapanisResmi), "_kapanis.jpg") : null;
 
   let logo: string | null = null;
   if (ilan.logo) {
@@ -67,5 +72,5 @@ export async function fotograflariHazirla(ilanKlasoru: string, ilan: Ilan, publi
     muzik = `ilan/${hedefAdi}`;
   }
 
-  return { publicKlasoru, fotograflar, logo, muzik };
+  return { publicKlasoru, fotograflar, logo, muzik, kapanisResmi };
 }

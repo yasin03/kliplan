@@ -1,0 +1,17 @@
+# İmaja girmeyenler: bağımlılıklar imajda kurulur; gizli bilgiler ve müşteri verisi asla girmez.
+node_modules
+web/node_modules
+web/.next
+.env
+.env.*
+!.env.example
+.cache
+.depolama
+cikti
+ilanlar
+docs
+deploy/yedekler
+coverage
+.git
+*.log
+.DS_Store

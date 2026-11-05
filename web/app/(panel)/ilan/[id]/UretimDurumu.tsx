@@ -18,8 +18,18 @@ export type IsOzeti = {
 const YENILEME_MS = 3000;
 const IS_ADLARI = { senaryo: "Senaryo", video: "Video" } as const;
 
+type Props = {
+  ilanId: string;
+  uretiliyor: boolean;
+  hataVar: boolean;
+  is: IsOzeti | null;
+  /** İş sırada ama kuyruğa bağlı worker yok: üretim servisi kapalı. */
+  workerYok: boolean;
+  admin: boolean;
+};
+
 /** Üretim sürerken sayfayı birkaç saniyede bir yeniler; hata varsa nedenini ve "Yeniden dene"yi gösterir. */
-export function UretimDurumu({ ilanId, uretiliyor, hataVar, is }: { ilanId: string; uretiliyor: boolean; hataVar: boolean; is: IsOzeti | null }) {
+export function UretimDurumu({ ilanId, uretiliyor, hataVar, is, workerYok, admin }: Props) {
   const router = useRouter();
   const [bekliyor, gecis] = useTransition();
   const [eylemHatasi, setEylemHatasi] = useState<string | null>(null);
@@ -29,6 +39,25 @@ export function UretimDurumu({ ilanId, uretiliyor, hataVar, is }: { ilanId: stri
     const sayac = setInterval(() => router.refresh(), YENILEME_MS);
     return () => clearInterval(sayac);
   }, [uretiliyor, router]);
+
+  if (uretiliyor && is && workerYok) {
+    return (
+      <Alert variant="destructive">
+        <TriangleAlert />
+        <AlertTitle>Üretim servisi çalışmıyor</AlertTitle>
+        <AlertDescription className="flex w-full flex-col gap-1">
+          <span>
+            {IS_ADLARI[is.tur]} işi sırada bekliyor; servis açılınca kendiliğinden başlar, yeniden basmanız gerekmez. Uzun sürerse yöneticiye haber verin.
+          </span>
+          {admin ? (
+            <span className="text-xs">
+              Yönetici: geliştirmede ikinci bir terminalde <code>npm run worker</code>, sunucuda <code>docker compose -f compose.sunucu.yaml ps worker</code>.
+            </span>
+          ) : null}
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
   if (uretiliyor && is) {
     const yuzde = is.ilerleme === null ? null : Math.round(is.ilerleme * 100);

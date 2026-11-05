@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TEMA_ADLARI } from "../remotion/temalar.js";
 
 /** Değeri ve doğrulanıp doğrulanmadığı birlikte tutulan bilgi. `onayli: false` ise metinde kullanılmaz. */
 const onayliDeger = <T extends z.ZodType>(deger: T) =>
@@ -69,13 +70,30 @@ export const ilanSemasi = z.strictObject({
   ozellikler: z.array(bosOlmayanMetin).default([]),
   kiraDurumu: kiraDurumuSemasi.optional(),
   logo: bosOlmayanMetin.optional(),
-  /** Ofise özel vurgu rengi. Verilmezse temadaki amber kullanılır. */
+  /** Renk teması: koyu, acik, sade. Verilmezse koyu. */
+  tema: z.enum(TEMA_ADLARI, { error: `Tema şunlardan biri olmalı: ${TEMA_ADLARI.join(", ")}` }).optional(),
+  /** Ofise özel vurgu rengi. Verilmezse temanın kendi rengi kullanılır. */
   vurguRengi: z.string().regex(/^#[0-9A-Fa-f]{6}$/, { error: "Vurgu rengi '#F2A541' biçiminde olmalı" }).optional(),
   /** Fon müziği. Yalnızca ticari kullanım izni olan yerel bir dosya; izin bilgisi kontrol raporuna yazılır. */
   muzik: z
     .strictObject({
       dosya: bosOlmayanMetin,
       lisans: bosOlmayanMetin.describe("Ticari kullanım izninin kaynağı, ör. lisans adı veya satın alma bağlantısı"),
+      /** Web panelinde emlakçının yüklediği müzikte: beyan metni, beyan eden ve zamanı. Kontrol raporuna yazılır. */
+      beyan: bosOlmayanMetin.optional(),
+    })
+    .optional(),
+  /** Kapanış sahnesinde ilan fotoğrafı yerine arka plan olacak resim (ör. şirketin ofis içi), ilan klasörüne göre. */
+  kapanisResmi: bosOlmayanMetin
+    .regex(/^[^/\\]+\.(jpe?g|png|webp)$/i, { error: "Kapanış resmi .jpg, .jpeg, .png veya .webp olmalı ve klasör yolu içermemeli" })
+    .optional(),
+  /** Kapanış kartında ek satır olarak gösterilecek şirket bilgileri; yalnızca gösterilecek olanlar yazılır. */
+  sirketBilgileri: z
+    .strictObject({
+      web: bosOlmayanMetin.optional(),
+      adres: bosOlmayanMetin.optional(),
+      yetkili: bosOlmayanMetin.optional(),
+      eposta: bosOlmayanMetin.optional(),
     })
     .optional(),
   /** Bu ilana özel telaffuz sözlüğü; projedeki telaffuz.json ile birleştirilir. */

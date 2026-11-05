@@ -1,0 +1,103 @@
+# Sunucu kurulumu (Faz 6.8): Hetzner üzerinde tek makine. Rehber: belgeler/kurulum.md
+# Başlatma: docker compose -f compose.sunucu.yaml up -d --build
+# Dosyalar Cloudflare R2'de (DEPOLAMA=s3); veritabanı ve Redis bu makinede, dışarıya kapalı.
+# Docker günlükleri varsayılan olarak sınırsız büyür; servis başına en fazla 5 x 10 MB.
+x-gunluk: &gunluk
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-uygulama: &uygulama
+  build: .
+  logging: *gunluk
+  image: kliplan:son
+  env_file: .env
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    logging: *gunluk
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kliplan
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env içinde tanımlı olmalı}
+      POSTGRES_DB: kliplan
+    volumes:
+      - postgres-veri:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kliplan -d kliplan"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    logging: *gunluk
+    restart: unless-stopped
+    # BullMQ, kuyruk anahtarlarının silinmemesi için "noeviction" ister.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-veri:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  # Tek seferlik: veritabanı migration'ları. Web ve worker bunun bitmesini bekler.
+  migration:
+    <<: *uygulama
+    restart: "no"
+    command: ["npm", "run", "db:uygula"]
+
+  web:
+    <<: *uygulama
+    command: ["npm", "run", "start", "-w", "@kliplan/web"]
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/api/saglik').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    <<: *uygulama
+    command: ["npm", "run", "worker"]
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+    # Render sırasında Chrome paylaşımlı belleği kullanır; Docker'ın 64 MB varsayılanı yetmez.
+    shm_size: 1gb
+    # Süren render bitmeden kapatılmasın (worker SIGTERM'de işi bitirip çıkar).
+    stop_grace_period: 5m
+    volumes:
+      - onbellek:/app/.cache
+
+  # HTTPS: Let's Encrypt sertifikasını kendisi alır ve yeniler.
+  caddy:
+    image: caddy:2
+    logging: *gunluk
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ALAN_ADI: ${ALAN_ADI:?ALAN_ADI .env içinde tanımlı olmalı}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-veri:/data
+    depends_on:
+      - web
+
+volumes:
+  postgres-veri:
+  redis-veri:
+  onbellek:
+  caddy-veri:

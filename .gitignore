@@ -27,3 +27,6 @@ ilanlar/
 # Sistem
 .DS_Store
 *.log
+
+# Sunucudaki yerel yedek kopyaları
+deploy/yedekler/

@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
 import { DuzenlemeHatasi } from "@cekirdek/veri/depo.js";
 import { FotografHatasi } from "@cekirdek/veri/fotografIsleme.js";
+import { GorunumDosyasiHatasi } from "@cekirdek/veri/gorunumIsleme.js";
 import { BulunamadiHatasi, ErisimHatasi } from "@cekirdek/veri/yetki.js";
 
 /** Kullanıcıya olduğu gibi gösterilebilecek hatanın mesajı; diğerleri için `null` (genel mesaj gösterilir, hata loglanır). */
 export function kullaniciMesaji(hata: unknown): string | null {
-  if (hata instanceof DuzenlemeHatasi || hata instanceof ErisimHatasi || hata instanceof FotografHatasi || hata instanceof BulunamadiHatasi) {
+  if (hata instanceof DuzenlemeHatasi || hata instanceof ErisimHatasi || hata instanceof FotografHatasi || hata instanceof GorunumDosyasiHatasi || hata instanceof BulunamadiHatasi) {
     return hata.message;
   }
   return null;

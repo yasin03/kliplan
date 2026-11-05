@@ -1,12 +1,11 @@
 import { Img, staticFile } from "remotion";
-import { tema } from "../tema.js";
-import { useVurgu } from "../vurgu.js";
+import { useGorunum } from "../gorunum.js";
 
 type Props = { ad: string; logo: string | null; boyut?: number };
 
 /** Emlak ofisinin adı ve varsa logosu. Logo yoksa yalnızca ad, tasarım bozulmadan gösterilir. */
 export const OfisRozeti: React.FC<Props> = ({ ad, logo, boyut = 36 }) => {
-  const vurgu = useVurgu();
+  const { tema, vurgu } = useGorunum();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: boyut * 0.45, minWidth: 0 }}>
       {logo ? (
@@ -19,7 +18,7 @@ export const OfisRozeti: React.FC<Props> = ({ ad, logo, boyut = 36 }) => {
       )}
       <div
         style={{
-          color: tema.renkler.beyaz,
+          color: tema.yazi,
           fontSize: boyut,
           fontWeight: 700,
           letterSpacing: "0.01em",

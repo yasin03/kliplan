@@ -1,0 +1,16 @@
+# ALAN_ADI .env'den gelir (ör. panel.kliplan.com). Caddy sertifikayı otomatik alır.
+{$ALAN_ADI} {
+	encode zstd gzip
+	# Fotoğraf yükleme sınırı 20 MB, müzik 15 MB; biraz pay.
+	request_body {
+		max_size 25MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options DENY
+		-Server
+	}
+	reverse_proxy web:3100
+}

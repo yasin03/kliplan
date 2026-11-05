@@ -2,7 +2,7 @@
 
 Kliplan, emlak ilanı bilgilerinden (`ilan.json`) ve yerel fotoğraflardan 20-30 saniyelik dikey tanıtım videosu (MP4) üretir.
 
-> Durum: **Faz 6 (web uygulaması) başladı.** Plan ve barındırma kararları: `docs/faz6-plan.md`. Tamamlanan adımlar: 6.1 çekirdek ayrımı, 6.2 altyapı ve giriş, 6.3 müşteri ayrımı, 6.4 ilan formu ve fotoğraf yükleme, 6.5 kuyruk ve worker, 6.6 önizleme, onay ve indirme.
+> Durum: **Faz 6 (web uygulaması) tamamlandı.** Plan ve barındırma kararları: `docs/faz6-plan.md`. Sunucu kurulumu, yedekleme, saklama ve KVKK: [belgeler/](belgeler/). Tamamlanan adımlar: 6.1 çekirdek ayrımı, 6.2 altyapı ve giriş, 6.3 müşteri ayrımı, 6.4 ilan formu ve fotoğraf yükleme, 6.5 kuyruk ve worker, 6.6 önizleme, onay ve indirme, 6.7 ofis ayarları, tema ve müzik, 6.8 işletim ve belgeler.
 
 ## Gereksinimler
 
@@ -86,6 +86,11 @@ Adımlar: 1 doğrulama → 2 fotoğraflar → 3 senaryo → 4 dış ses → 5 re
 | `npm run render:ornek -- ilanlar/temurlar` | Elle yazılmış `ornek-sahneler.json` dosyasından `cikti/temurlar/ornek.mp4` üretir |
 | `npm run render:ornek -- ilanlar/temurlar --kareler 30,150,450,son` | Videoya ek olarak bu kareleri JPEG olarak kaydeder (`son` = kapanış sahnesinin ortası) |
 | `npm run render:ornek -- ilanlar/temurlar --senaryo tests/veri/uzun-baslik-sahneler.json --cikti cikti/uzun-baslik/test.mp4 --kareler 60,170` | Uzun başlık ve altyazı taşma testi |
+| `npm run tema:onizleme` | Her tema için bir sahne ve kapanış karesi render eder; paneldeki tema seçimi bu görselleri (`web/public/temalar/`) gösterir. `--vurgu #2BB673` ile bir rengi her temada dener |
+| `npm run temizlik` | Saklama süresi dolan verileri listeler; `-- --uygula` ile siler (belgeler/isletim.md) |
+| `npm run ofis-sil -- --ofis "<ad>"` | Ofisi bütün verisiyle silmeden önce listeler; `--uygula` ile siler |
+| `npm run kullanici-sil -- --eposta <e-posta>` | Hesabı ve oturumlarını siler |
+| `npm run yedek -- listele` / `yukle <dosya>` / `indir <anahtar> <hedef>` | Veritabanı yedekleri (yedek bucket'ı, `YEDEK_S3_*`) |
 
 | `npm run senaryo -- ilanlar/temurlar` | Yapay zeka (varsayılan Gemini) ile sahne metni üretir, doğrular, `cikti/temurlar/senaryo.json` olarak kaydeder |
 | `npm run senaryo -- ilanlar/temurlar --mock` | Aynısını API kullanmadan sahte sağlayıcıyla yapar |
@@ -352,11 +357,118 @@ npm run worker -- --mock  # API kullanmadan test üretimi; raporda "TEST ÜRETİ
 - **Video oynatma (yerel):** `/dosya/...` yolu `Range` isteklerini destekliyor (206), çünkü Safari videoyu parça parça ister.
   - Next.js geliştirme sunucusu yanıttan `Content-Length`'i kaldırıp chunked gönderiyor. Safari'de yerel oynatma denenmedi.
   - Yerel depoda her parça isteği dosyanın tamamını okur; sunucuda R2'nin kendi bağlantıları kullanılacak.
-- **Geliştirme notu:** Web sunucusu veritabanı bağlantısını tek örnek tutuyor. `src/db/sema.ts` değişince `npm run web`'i yeniden başlatın, yoksa yeni sütunlar görünmez.
+- **Geliştirme notu:** Web sunucusu bağlantı havuzunu tek örnek tutuyor, Drizzle'ı her kod yüklemesinde güncel şemayla yeniden kuruyor. `src/db/sema.ts` değişince yeniden başlatmak gerekmez (6.7'de eklenen `muzik` tablosu eski örnekte görünmediği için düzeltildi). Yeni migration'ı yine `npm run db:uygula` ile uygulayın.
 - **Veritabanı:** `video.test` eklendi (migration `0003`). Uygulamak için: `npm run db:uygula`.
 - **Testler:**
   - Onay, eksik madde, eski sürüm, test videosu ve başka ofis denemeleri; bilgiler değişince onayın engellenmesi; yeniden üretim ([tests/worker.test.ts](tests/worker.test.ts)).
   - İndirme adının imzası ve `Range` çözümü ([tests/depolama.test.ts](tests/depolama.test.ts)).
+
+### 6.7 Ofis ayarları, tema ve müzik
+
+Panelde üst menüye **Ofis ayarları** ve **Müzik** eklendi; ilan sayfasında **Görünüm ve müzik** kartı var.
+
+- **Ofis ayarları** (`/ayarlar`): logo, vurgu rengi, varsayılan tema, varsayılan müzik, telefon ve yetki belgesi (yeni ilan formu bunlarla başlar).
+  - Ayarlar yalnızca bundan sonra üretilen videolara uygulanır. Üretilmiş videolar ve onaylar değişmez; ilanların durumu da değişmez.
+  - Ofis adı panelden değiştirilemez (videoda ve `kullanici-ekle --ofis` eşleşmesinde kullanılıyor).
+  - Admin hangi ofisi düzenleyeceğini seçer (`/ayarlar?ofis=<id>`).
+- **Temalar** ([src/remotion/temalar.ts](src/remotion/temalar.ts)): Koyu (önceki görünüm), Açık (krem zemin, koyu yazı), Sade (siyah zemin, ince köşeler). İlan, ofisin temasını geçersiz kılabilir. `ilan.json`'da da `"tema": "acik"` yazılabilir.
+  - Renkler temadan gelir, yerleşim ve hareket ortak (`tema.ts`). Bileşenler `useGorunum()` ile okur.
+  - Ekran görüntüleriyle kontrol edildi (`npm run tema:onizleme`). Önizlemeler kurgusal ÖRNEK ilandan üretilir, gerçek müşteri fotoğrafı içermez.
+- **Vurgu rengi ve kontrast:** Fiyat kapanış kartında vurgu renginde yazıldığı için renk her temanın kart zeminine göre kontrol edilir (en az 3:1).
+  - Ayarlarda her tema için sonuç canlı gösterilir. Varsayılan temada okunmayan renk kaydedilmez.
+  - Başka bir temada okunmuyorsa uyarı verilir; o temayı seçen ilanda video üretimi başlamaz ve neden söylenir. CLI'da aynı kural doğrulama hatasıdır.
+  - Örnek: amber (#F2A541) koyu temada okunur, açık temada okunmaz; açık temanın kendi rengi #C2410C.
+- **Logo** ([src/veri/gorunumIsleme.ts](src/veri/gorunumIsleme.ts)): PNG, JPEG veya WebP, en fazla 5 MB.
+  - İçeriğe bakılarak doğrulanır. Saydamlık korunarak PNG'ye çevrilir, en fazla 1200x600'e küçültülür, üst veriler silinir.
+  - SVG kabul edilmez, çünkü içinde betik ve dış bağlantı olabilir.
+  - Saydam zeminli logo çok açıksa (açık temada kaybolur) veya çok koyuysa (koyu/sade temada kaybolur) uyarı verilir. Ayarlarda logo hem koyu hem beyaz zeminde gösterilir.
+- **Müzik** (`/muzik`): Hazır kütüphane ve ofisin kendi yüklemeleri. Her ilanda "ofis varsayılanı", "müziksiz" veya belirli bir müzik seçilebilir.
+  - **Kütüphane:** Yalnızca admin ekler ve siler; bütün ofisler görür. Lisans bilgisi zorunlu. Dosyalar `kutuphane/muzik/` altında (ofis önekinin dışında), bütün girişli kullanıcılar dinleyebilir.
+  - **Ofis yüklemesi:** Yükleyen, beyan kutusunu işaretlemeden yükleyemez. Beyan metni, beyan eden kullanıcının adı ve zamanı saklanır. Başka ofis bu müziği göremez ve seçemez.
+  - Beyan metni [src/veri/gorunum.ts](src/veri/gorunum.ts) içinde (`MUZIK_BEYANI`). Hukuki danışmanla gözden geçirilmeli (6.8 KVKK notuna eklenecek).
+  - **Doğrulama:** MP3, M4A (AAC) veya WAV, en fazla 15 MB, 5 sn - 10 dk. Uzantıya güvenilmez; Mediabunny dosyayı açıp süresini ölçer. Görüntü içeren dosya reddedilir. Dosya adı rastgele üretilir.
+  - **Kontrol raporu:** Yeni "Görünüm ve müzik" bölümü tema, vurgu rengi ve logoyu yazar. Müzik varsa lisans ve beyan da yazılır. Onay listesine "müziğin ticari kullanım izni doğrulandı" maddesi eklenir.
+  - **Silme:** Silinen müziği seçmiş ilanlar ofisin varsayılan müziğine, onu varsayılan yapmış ofisler müziksize döner. Üretilmiş videolar etkilenmez.
+- **İlanın görünümü değişince** (tema veya müzik) ilan taslağa döner, senaryo korunur. Video yeniden üretilmelidir.
+- **Worker:** Ofisin logosu ve ilanın müziği iş klasörüne `logo.png` ve `muzik.<uzantı>` olarak yazılır. `ilan.json`'a tema, vurgu rengi, logo ve müzik (lisans ve beyan dahil) eklenir. Senaryo önbelleği bu alanlara bakmaz; görünüm değişince senaryo yeniden ücretlendirilmez, yalnızca video yeniden render edilir.
+- **Bağımlılık:** `mediabunny` 1.64.0 (MPL-2.0) doğrudan eklendi. Remotion zaten bu sürümü kullanıyor ve medya bilgisi için bunu öneriyor (`getVideoMetadata` kullanımdan kalktı).
+- **Veritabanı:** Bu sürümde `muzik` tablosu eklendi. `ofis` tablosuna `varsayilan_muzik_id`, `ilan` tablosuna `tema`, `muzik_secimi` ve `muzik_id` eklendi (migration `0004`). Uygulamak için `npm run db:uygula` çalıştırın.
+- **Testler:**
+  - Tema kontrastı, şema ve rapor: [tests/temalar.test.ts](tests/temalar.test.ts).
+  - Logo/müzik işleme, görünüm çözümü ve ayar formu: [tests/gorunum.test.ts](tests/gorunum.test.ts).
+  - Ofisler arası müzik/logo/ayar erişimi, kütüphane yetkisi, silme davranışı ve worker'ın logo, müzik ve temayı videoya taşıması: [tests/gorunumVeri.test.ts](tests/gorunumVeri.test.ts).
+
+### 6.8 İşletim ve belgeler
+
+Belgeler `belgeler/` klasöründe. `docs/` gitignore'da olduğu için sunucuda gereken belgeler buraya kondu.
+
+- [belgeler/kurulum.md](belgeler/kurulum.md): Hetzner, Cloudflare R2 (AB yetki alanı), DNS, `.env`, ilk başlatma ve güncelleme. Ayrıca gerçek sunucuda yapılacak **ilk kurulum kontrol listesi**.
+- [belgeler/isletim.md](belgeler/isletim.md): Nerede ne tutulduğu, gece yedeği, geri yükleme ve geri yükleme denemesi. Ayrıca saklama süreleri, her veri için silme akışı ve rutin bakım.
+- [belgeler/kvkk.md](belgeler/kvkk.md): Kişisel veri envanteri (ne, kimin, nerede, neden, ne kadar), yurt dışına aktarım ve alt işleyenler, **hukuki danışmanla kontrol edilecek 10 nokta**.
+
+Kod:
+
+- **R2 depolama** ([src/depolama/S3Depolama.ts](src/depolama/S3Depolama.ts)): `DEPOLAMA=s3` ile açılır. Bağımlılık: AWS SDK v3, `@aws-sdk/client-s3` ve `@aws-sdk/s3-request-presigner` 3.1155.0, Apache-2.0. Son sürüm bir gün önce çıktığı için en az iki haftalık bu sürüm seçildi.
+  - SDK yalnızca zorunlu checksum'ları gönderir (`WHEN_REQUIRED`), çünkü R2 bazı checksum başlıklarını desteklemiyor.
+  - Önekle silme dosyaları tek tek siler; toplu silme zorunlu checksum istiyor.
+  - İndirme adı imzalı bağlantıya `response-content-disposition` olarak eklenir. R2'nin bunu desteklediği resmi belgede yazmıyor; kurulum listesinde denenecek.
+  - S3 uyumlu SeaweedFS ile test edildi: yazma, okuma, önekle silme, imzalı bağlantı, Range, indirme adı. MinIO imajı Docker Hub'dan kaldırılmış.
+- **Yedek** (`npm run yedek`, `deploy/yedekle.sh`):
+  - `pg_dump -Fc` dökümü ayrı bir R2 bucket'ına yüklenir ve yalnızca o bucket'a yetkili ayrı anahtarla erişilir.
+  - Yedekler 30 gün tutulur; en yeni 3 yedek her zaman kalır.
+- **Saklama** (`npm run temizlik`, `deploy/bakim.sh`, [src/veri/bakim.ts](src/veri/bakim.ts)):
+  - İlan son güncellemeden 365 gün sonra silinir; eski onaysız video sürümü 30 gün sonra.
+  - Worker önbelleği 30 gün sonra, süresi dolan oturumlar her gece silinir.
+  - Varsayılan çalışma yalnızca listeler; silmek için `--uygula` gerekir.
+- **Silme:**
+  - `ofis-sil`: müşteri ayrılınca ofisin bütün verisini siler. Önce listeler; üretim sürerken durur.
+  - `kullanici-sil`: hesabı siler. İlanlar ofiste kalır, müzik beyanında ad kayıt olarak kalır.
+- **Düzeltme:** Yerel depoda ofisin tamamını önekle silmek (`ofis/<id>/`) anahtar doğrulamasına takılıyordu; düzeltildi.
+- **Sunucu:**
+  - `Dockerfile`: Remotion'ın önerdiği Debian imajı ve Chrome kütüphaneleri; uygulama root olmadan çalışır.
+  - `compose.sunucu.yaml`: PostgreSQL, Redis, tek seferlik migration, web, worker ve Caddy (otomatik HTTPS). Günlükler servis başına 50 MB ile sınırlı.
+  - `deploy/Caddyfile`: istek gövdesi en fazla 25 MB, güvenlik başlıkları; erişim günlüğü yok.
+- **Chrome:** Linux'ta Remotion'ın önerdiği headless shell ve çok süreçli kip, macOS'ta Chrome for Testing ([src/pipeline/render.ts](src/pipeline/render.ts)).
+- **Sağlık kontrolü:** `GET /api/saglik` veritabanına ulaşılıyorsa 200, ulaşılamıyorsa 503 döner. Compose sağlık kontrolü ve dış izleme bunu kullanır.
+- **Doğrulama:**
+  - İmaj yerelde (arm64) derlendi. İçinde `--mock` ile 32,9 saniyelik video render edildi.
+  - Konteynerde migration uygulandı; web, S3 depolamayla başladı ve sağlık kontrolü 200 döndü.
+  - **Gerçek Hetzner ve R2 ile denenmedi.** `deploy/yedekle.sh` ve `deploy/bakim.sh` sunucu compose'u içinde çalıştırılmadı; yedek ve temizlik modülleri testlerde denendi.
+- **Testler:**
+  - Saklama, temizlik, ofis ve kullanıcı silme, yedek yükleme ve saklama: [tests/bakim.test.ts](tests/bakim.test.ts).
+  - S3 depolama: [tests/s3Depolama.test.ts](tests/s3Depolama.test.ts). S3 testleri `TEST_S3_ENDPOINT` yoksa atlanır; çalıştırma komutu dosyanın başında.
+
+### Şirket ayarları ve şirket resimleri
+
+"Ofis ayarları" sayfasının adı **Şirket ayarları** oldu. Panelde "ofis" yerine "şirket" yazıyor; koddaki adlar (`ofis` tablosu, `/ayarlar`) aynı kaldı.
+
+- **Şirket bilgileri:** Şirket adı, adres, il, ilçe, sabit telefon, cep telefonu, yetki belge no, e-posta, web ve yetkilinin adı soyadı. Logo ayrı bölümde.
+  - Telefonlar `0505 709 44 88` biçimine çevrilir. Web adresi protokolsüz saklanır (`https://www.ornek.com/` → `ornek.com`).
+  - Yeni ilan formunda telefon önce cep telefonuyla, yoksa sabit telefonla dolu gelir.
+- **Şirket adı değiştirilebilir:** Ad benzersizdir, başka bir şirketin adı alınamaz (`kullanici-ekle --ofis` şirketi adıyla buluyor; ad değişince yeni adı kullanın).
+  - Son sahnenin dış sesi şirket adını içerdiği için, eski adla yazılmış senaryolar artık geçersiz. Ad değişince ayarlar sayfası bunu söyler.
+  - Video üretimi de kuyruğa girmeden önce senaryoyu kontrol eder: "Senaryo güncel değil … senaryoyu düzenleyin veya yeniden üretin".
+- **Kapanış kartında göster:** Web, adres (`adres, ilçe/il`), yetkili ve e-postadan hangilerinin videonun son kartında görüneceğini şirket seçer. Boş bir bilgi seçilemez.
+  - Dördü birden seçilse de kart üç temada taşmıyor (`npm run tema:onizleme` en kalabalık haliyle render eder).
+  - Uzun satır "…" ile kısalır. Gösterilen bilgiler kontrol raporundaki kritik bilgiler tablosuna ve onay listesine de girer.
+- **Şirket resimleri** (en fazla 12): Ofis içi, dış cephe, ekip gibi resimler.
+  - Seçilen resim videonun **kapanış sahnesinde arka plan** olur, ilan fotoğrafının yerini alır. Süre, dış ses ve senaryo değişmez.
+  - İlan fotoğraflarıyla aynı işlemden geçer: EXIF silinir, 2160 px'e küçültülür, JPEG yapılır.
+  - Silinen resmi seçmiş ilanlar şirketin varsayılanına, onu varsayılan yapmış şirket "ilan fotoğrafı"na döner. Üretilmiş videolar değişmez.
+- **Seçim yerleri:** Tema, müzik ve kapanış resmi için Şirket ayarları'nda varsayılan seçilir.
+  - İlan formundaki yeni **Görünüm** bölümünden ve ilan sayfasındaki kartta ilana özel seçim yapılır.
+  - Admin yeni ilan açarken şirket henüz belli olmadığı için bölüm görünmez; ilan şirketin varsayılanlarıyla açılır.
+- **Senaryo korunuyor:** İlan bilgileri formu artık yalnızca bilgiler gerçekten değiştiyse senaryoyu siler; yalnızca görünüm değiştiyse senaryo kalır.
+  - PostgreSQL `jsonb` anahtar sırasını değiştirdiği için karşılaştırma sıradan bağımsız.
+- **CLI:** `ilan.json`'a `kapanisResmi` (dosya) ve `sirketBilgileri` (`web`, `adres`, `yetkili`, `eposta`) yazılabilir.
+- **Veritabanı:**
+  - `ofis` tablosuna yeni bilgi alanları, `kapanis_alanlari` ve `varsayilan_resim_id` eklendi; `ad` artık benzersiz.
+  - Yeni `sirket_resmi` tablosu eklendi; `ilan` tablosuna `resim_secimi` ve `resim_id` eklendi (migration `0005`).
+  - Uygulamak için: `npm run db:uygula`.
+- **Testler:**
+  - Form doğrulaması, seçim kuralları ve kapanış satırları: [tests/gorunum.test.ts](tests/gorunum.test.ts).
+  - Şirketler arası resim erişimi, 12 resim sınırı, silme davranışı, ad benzersizliği, senaryonun korunması: [tests/gorunumVeri.test.ts](tests/gorunumVeri.test.ts).
+  - Worker'ın kapanış resmini ve şirket satırlarını videoya ve rapora taşıması da aynı dosyada.
 
 ## Lisans ve ses aracı
 

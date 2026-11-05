@@ -5,6 +5,7 @@ export class DepolamaHatasi extends Error {}
 /**
  * Dosya deposu. Geliştirmede yerel klasör, sunucuda S3 uyumlu servis (Cloudflare R2).
  * Anahtarlar `ofis/<ofisId>/...` biçimindedir; erişim kontrolü bu önek üzerinden yapılır.
+ * Bütün ofislerin ortak kullandığı hazır müzik kütüphanesi `kutuphane/...` altındadır.
  */
 export interface Depolama {
   readonly kimlik: string;
@@ -21,7 +22,7 @@ export interface Depolama {
   imzaliBaglanti(anahtar: string, sureSn: number, indirmeAdi?: string): Promise<string>;
 }
 
-const GECERLI_ANAHTAR = /^ofis\/[A-Za-z0-9-]+\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+$/;
+const GECERLI_ANAHTAR = /^(?:ofis\/[A-Za-z0-9-]+|kutuphane)\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+$/;
 
 /** Klasör dışına çıkmayı (`..`) ve beklenmeyen karakterleri engeller. */
 export function anahtariDogrula(anahtar: string): string {
@@ -32,6 +33,7 @@ export function anahtariDogrula(anahtar: string): string {
 }
 
 export const ofisOneki = (ofisId: string) => `ofis/${ofisId}/`;
+export const KUTUPHANE_ONEKI = "kutuphane/";
 export const ilanOneki = (ofisId: string, ilanId: string) => `${ofisOneki(ofisId)}ilan/${ilanId}/`;
 
 /** İndirme adı başlığa yazılır; başlık enjeksiyonunu önlemek için yalnızca güvenli karakterler. */

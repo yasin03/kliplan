@@ -1,9 +1,9 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { asc, eq, max } from "drizzle-orm";
+import { and, asc, eq, max } from "drizzle-orm";
 import type { Veritabani } from "../db/baglanti.js";
-import { fotograf, ilan, type KayitliHata, ofis, uretimIsi, video } from "../db/sema.js";
+import { fotograf, ilan, type KayitliHata, muzik, ofis, sirketResmi, uretimIsi, video } from "../db/sema.js";
 import { anahtariDogrula, type Depolama, ilanOneki } from "../depolama/Depolama.js";
 import { FOTOGRAF_KLASORU, ILAN_DOSYASI } from "../pipeline/dogrulama.js";
 import type { videoyuRenderEt } from "../pipeline/render.js";
@@ -11,6 +11,7 @@ import { duzenlenenSenaryo, SenaryoHatasi, type SenaryoSonucu } from "../pipelin
 import { AdimHatasi, ilanHazirla, senaryoAsamasi, videoAsamasi } from "../pipeline/uretim.js";
 import type { ScriptProvider } from "../providers/ScriptProvider.js";
 import type { TtsProvider } from "../providers/TtsProvider.js";
+import { gorunumAlanlari, ilanMuzikId, ilanResimId, muzikKullanilabilir } from "../veri/gorunum.js";
 import { ilanJsonuOlustur } from "../veri/ilanFormu.js";
 
 export type IsBaglami = {
@@ -31,8 +32,12 @@ export type IsBaglami = {
  * Panelde gösterilecek çözüm. Pipeline'ın kendi çözüm metinleri CLI içindir (".env", "--mock");
  * emlakçıya ne yapacağı söylenir, teknik ayrıntı `mesaj`da kalır.
  */
-function panelCozumu(adim: string): string {
+function panelCozumu(adim: string, mesaj: string): string {
   const sira = Number(adim.split("/")[0]);
+  // Sağlayıcı yoğun (503) veya kota doldu (429): metinle ilgisi yok, beklemek gerekir.
+  if ((sira === 3 || sira === 4) && /\((503|429)\)/.test(mesaj)) {
+    return "Yapay zeka servisi şu an çok yoğun veya kullanım sınırı doldu. Birkaç dakika sonra yeniden deneyin; tamamlanan adımlar tekrar ücretlendirilmez.";
+  }
   switch (sira) {
     case 1:
       return "İlan bilgilerini ve fotoğrafları kontrol edip düzeltin, sonra yeniden deneyin.";
@@ -49,7 +54,7 @@ function panelCozumu(adim: string): string {
 }
 
 export function kayitliHata(hata: unknown): KayitliHata {
-  if (hata instanceof AdimHatasi) return { adim: hata.adim, mesaj: hata.message, cozum: panelCozumu(hata.adim) };
+  if (hata instanceof AdimHatasi) return { adim: hata.adim, mesaj: hata.message, cozum: panelCozumu(hata.adim, hata.message) };
   return {
     adim: "Üretim",
     mesaj: hata instanceof Error ? hata.message : String(hata),
@@ -67,19 +72,32 @@ export async function isiHataylaKapat(db: Veritabani, isId: string, hata: Kayitl
   });
 }
 
-/** Veritabanındaki ilanı pipeline'ın okuduğu klasör yapısına çevirir: `ilan.json` + `fotograflar/`. */
+/** Veritabanındaki ilanı pipeline'ın okuduğu klasör yapısına çevirir: `ilan.json` + `fotograflar/`, varsa logo, müzik ve kapanış resmi. */
 async function ilanKlasoruKur(b: IsBaglami, ilanId: string, klasor: string) {
   const kayit = await b.db.query.ilan.findFirst({ where: eq(ilan.id, ilanId) });
   if (!kayit) throw new AdimHatasi("1/6 Doğrulama", "İlan bulunamadı; silinmiş olabilir.", "");
   const ofisKaydi = (await b.db.query.ofis.findFirst({ where: eq(ofis.id, kayit.ofisId) }))!;
   const fotograflar = await b.db.query.fotograf.findMany({ where: eq(fotograf.ilanId, ilanId), orderBy: [asc(fotograf.sira), asc(fotograf.olusturma)] });
 
-  const json = ilanJsonuOlustur(kayit.veri, ofisKaydi, fotograflar);
+  const muzikId = ilanMuzikId(ofisKaydi, kayit);
+  const bulunan = muzikId ? await b.db.query.muzik.findFirst({ where: eq(muzik.id, muzikId) }) : undefined;
+  const muzikKaydi = bulunan && muzikKullanilabilir(bulunan, kayit.ofisId) ? bulunan : null;
+
+  const resimId = ilanResimId(ofisKaydi, kayit);
+  const resimKaydi = resimId
+    ? ((await b.db.query.sirketResmi.findFirst({ where: and(eq(sirketResmi.id, resimId), eq(sirketResmi.ofisId, kayit.ofisId)) })) ?? null)
+    : null;
+
+  const gorunum = gorunumAlanlari(ofisKaydi, kayit, muzikKaydi, resimKaydi);
+  const json = ilanJsonuOlustur(kayit.veri, ofisKaydi, fotograflar, gorunum);
   if (!json.basarili) throw new AdimHatasi("1/6 Doğrulama", json.hatalar.join("\n"), "");
 
   await mkdir(path.join(klasor, FOTOGRAF_KLASORU), { recursive: true });
   await writeFile(path.join(klasor, ILAN_DOSYASI), JSON.stringify(json.ilan, null, 2));
   for (const f of fotograflar) await writeFile(path.join(klasor, FOTOGRAF_KLASORU, f.dosyaAdi), await b.depolama.oku(f.anahtar));
+  if (gorunum.logo && ofisKaydi.logoAnahtari) await writeFile(path.join(klasor, gorunum.logo), await b.depolama.oku(ofisKaydi.logoAnahtari));
+  if (gorunum.muzik && muzikKaydi) await writeFile(path.join(klasor, gorunum.muzik.dosya), await b.depolama.oku(muzikKaydi.anahtar));
+  if (gorunum.kapanisResmi && resimKaydi) await writeFile(path.join(klasor, gorunum.kapanisResmi), await b.depolama.oku(resimKaydi.anahtar));
   return kayit;
 }
 

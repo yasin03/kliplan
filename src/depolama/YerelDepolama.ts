@@ -40,7 +40,9 @@ export class YerelDepolama implements Depolama {
 
   async onekSil(onek: string): Promise<void> {
     const temiz = onek.replace(/\/$/, "");
-    await rm(this.yol(temiz), { recursive: true, force: true });
+    // Önek tek başına geçerli bir anahtar olmayabilir (ör. ofisin tamamı `ofis/<id>/`); altındaki bir anahtar gibi doğrulanır.
+    anahtariDogrula(`${temiz}/x`);
+    await rm(path.join(this.kok, temiz), { recursive: true, force: true });
   }
 
   async imzaliBaglanti(anahtar: string, sureSn: number, indirmeAdi?: string): Promise<string> {

@@ -11,7 +11,8 @@ import { OfisRozeti } from "./bilesenler/OfisRozeti.js";
 import { sahneKareSayisi } from "./hesap.js";
 import { tema } from "./tema.js";
 import type { Sahne, VideoProps } from "./tipler.js";
-import { VurguRengi } from "./vurgu.js";
+import { GorunumBaglami, useGorunum } from "./gorunum.js";
+import { TEMALAR, VARSAYILAN_TEMA } from "./temalar.js";
 
 const { guvenliAlan } = tema;
 
@@ -23,14 +24,16 @@ type SahneProps = {
 };
 
 const SahneGorunumu: React.FC<SahneProps> = ({ sahne, sira, kapanis, props }) => {
-  const foto = props.fotograflar[sahne.fotograf];
+  const { tema: renkler } = useGorunum();
+  // Şirket resmi seçildiyse kapanışta ilan fotoğrafının yerine geçer; metin ve süre değişmez.
+  const foto = kapanis && props.kapanisFotografi ? props.kapanisFotografi : props.fotograflar[sahne.fotograf];
   if (!foto) throw new Error(`Sahne ${sira + 1}: "${sahne.fotograf}" fotoğrafı hazırlanmamış.`);
 
   return (
     <AbsoluteFill>
       <FotografKatmani foto={foto} sira={sira} sureKare={sahneKareSayisi(sahne)} />
       <Karartma />
-      {kapanis ? <AbsoluteFill style={{ background: `${tema.renkler.lacivertKoyu}8C` }} /> : null}
+      {kapanis ? <AbsoluteFill style={{ background: `${renkler.zemin}8C` }} /> : null}
 
       <div
         style={{
@@ -89,9 +92,10 @@ const FonMuzigi: React.FC<{ src: string }> = ({ src }) => {
 
 export const IlanVideosu: React.FC<VideoProps> = (props) => {
   const { sahneler } = props;
+  const secilen = TEMALAR[props.tema ?? VARSAYILAN_TEMA];
   return (
-    <VurguRengi.Provider value={props.vurguRengi ?? tema.renkler.vurgu}>
-      <AbsoluteFill lang="tr" style={{ background: tema.renkler.lacivertKoyu, fontFamily: `${tema.yazi.aile}, sans-serif` }}>
+    <GorunumBaglami.Provider value={{ tema: secilen, vurgu: props.vurguRengi ?? secilen.vurgu }}>
+      <AbsoluteFill lang="tr" style={{ background: secilen.zemin, fontFamily: `${tema.yazi.aile}, sans-serif` }}>
         <TransitionSeries>
           {sahneler.map((sahne, sira) => (
             <Fragment key={sira}>
@@ -106,6 +110,6 @@ export const IlanVideosu: React.FC<VideoProps> = (props) => {
         </TransitionSeries>
         {props.muzik ? <FonMuzigi src={props.muzik} /> : null}
       </AbsoluteFill>
-    </VurguRengi.Provider>
+    </GorunumBaglami.Provider>
   );
 };

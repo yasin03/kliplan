@@ -2,11 +2,11 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
+import { VARSAYILAN_TEMA } from "../remotion/temalar.js";
 import { alanYolu, turkceHataHaritasi } from "../schema/hatalar.js";
-import { tema } from "../remotion/tema.js";
 import { ilanSemasi, type Ilan } from "../schema/ilan.js";
 import { KontrolRaporu } from "./kontrolRaporu.js";
-import { EN_AZ_KONTRAST, kontrastOrani } from "./renk.js";
+import { vurguHatasi } from "./renk.js";
 
 export const ILAN_DOSYASI = "ilan.json";
 export const FOTOGRAF_KLASORU = "fotograflar";
@@ -67,15 +67,8 @@ export function tutarlilikKontrolu(ilan: Ilan, rapor: KontrolRaporu): void {
     rapor.uyari("Kat", `Bulunduğu kat (${ilan.bulunduguKat}) bina kat sayısından (${ilan.katSayisi}) büyük.`);
   }
 
-  if (ilan.vurguRengi) {
-    const oran = kontrastOrani(ilan.vurguRengi, tema.renkler.lacivert);
-    if (oran < EN_AZ_KONTRAST) {
-      rapor.hata(
-        "Vurgu rengi",
-        `${ilan.vurguRengi} lacivert zemin üzerinde okunmuyor (kontrast ${oran.toFixed(1)}:1, en az ${EN_AZ_KONTRAST}:1 olmalı). Daha açık bir renk seçin.`,
-      );
-    }
-  }
+  const vurgu = vurguHatasi(ilan.vurguRengi, ilan.tema ?? VARSAYILAN_TEMA);
+  if (vurgu) rapor.hata("Vurgu rengi", vurgu);
 }
 
 export const icerikOzeti = (icerik: Buffer) => createHash("sha256").update(icerik).digest("hex");
@@ -132,6 +125,9 @@ async function fotograflariKontrolEt(klasor: string, ilan: Ilan, rapor: KontrolR
 
   if (ilan.logo && !(await dosyaVarMi(path.join(klasor, ilan.logo)))) {
     rapor.hata("Logo", `Logo dosyası bulunamadı: ${ilan.logo}`);
+  }
+  if (ilan.kapanisResmi && !(await dosyaVarMi(path.join(klasor, ilan.kapanisResmi)))) {
+    rapor.hata("Kapanış resmi", `Kapanış resmi bulunamadı: ${ilan.kapanisResmi}`);
   }
 
   if (ilan.muzik) {

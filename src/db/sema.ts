@@ -1,4 +1,5 @@
-import { boolean, index, integer, jsonb, pgEnum, pgTable, real, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, boolean, index, integer, jsonb, pgEnum, pgTable, real, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import type { KapanisAlani } from "../veri/kapanisAlanlari.js";
 
 /**
  * Veritabanı şeması. Sütun adları kodda camelCase, veritabanında snake_case (`casing: "snake_case"`).
@@ -18,17 +19,80 @@ const zamanDamgalari = () => ({
     .$onUpdate(() => new Date()),
 });
 
-export const ofis = pgTable("ofis", {
-  id: kimlik(),
-  ad: text().notNull(),
-  /** Ofis ayarlarından doldurulur; boşsa ilan formunda istenir. */
-  telefon: text(),
-  yetkiBelgeNo: text(),
-  logoAnahtari: text(),
-  vurguRengi: text(),
-  tema: text().notNull().default("koyu"),
-  ...zamanDamgalari(),
-});
+
+export const ofis = pgTable(
+  "ofis",
+  {
+    id: kimlik(),
+    /** Panelde "şirket adı". `kullanici-ekle --ofis` şirketi bu adla bulduğu için benzersiz. */
+    ad: text().notNull(),
+    /** Sabit telefon. Şirket ayarlarından doldurulur; yeni ilan formu cep telefonu yoksa bununla başlar. */
+    telefon: text(),
+    cepTelefonu: text(),
+    yetkiBelgeNo: text(),
+    adres: text(),
+    il: text(),
+    ilce: text(),
+    eposta: text(),
+    /** Protokolsüz saklanır, ör. `temurlargrup.com`. */
+    web: text(),
+    yetkiliAdi: text(),
+    yetkiliSoyadi: text(),
+    kapanisAlanlari: jsonb().$type<KapanisAlani[]>().notNull().default([]),
+    logoAnahtari: text(),
+    vurguRengi: text(),
+    /** İlanlarda varsayılan tema (`TEMA_ADLARI`); ilan başına değiştirilebilir. */
+    tema: text().notNull().default("koyu"),
+    /** İlanlarda varsayılan müzik; boşsa müziksiz. */
+    varsayilanMuzikId: text().references((): AnyPgColumn => muzik.id, { onDelete: "set null" }),
+    /** İlanlarda varsayılan kapanış arka planı; boşsa ilan fotoğrafı. */
+    varsayilanResimId: text().references((): AnyPgColumn => sirketResmi.id, { onDelete: "set null" }),
+    ...zamanDamgalari(),
+  },
+  (t) => [uniqueIndex().on(t.ad)],
+);
+
+/** Şirketin kendi resimleri (ör. ofis içi). Seçilen resim videonun kapanış sahnesinde arka plan olur. */
+export const sirketResmi = pgTable(
+  "sirket_resmi",
+  {
+    id: kimlik(),
+    ofisId: text()
+      .notNull()
+      .references((): AnyPgColumn => ofis.id, { onDelete: "cascade" }),
+    anahtar: text().notNull(),
+    genislik: integer().notNull(),
+    yukseklik: integer().notNull(),
+    ...zamanDamgalari(),
+  },
+  (t) => [index().on(t.ofisId)],
+);
+
+/**
+ * Fon müzikleri. `ofisId` boşsa hazır kütüphane (admin ekler, lisansını admin sağlar, bütün ofisler görür);
+ * doluysa ofisin kendi yüklemesi (yükleyen ticari kullanım iznini beyan eder). Lisans ve beyan kontrol raporuna yazılır.
+ */
+export const muzik = pgTable(
+  "muzik",
+  {
+    id: kimlik(),
+    ofisId: text().references((): AnyPgColumn => ofis.id, { onDelete: "cascade" }),
+    ad: text().notNull(),
+    anahtar: text().notNull(),
+    icerikTuru: text().notNull(),
+    sureSn: real().notNull(),
+    boyutBayt: integer().notNull(),
+    /** Ticari kullanım izninin kaynağı: lisans adı, satın alma bağlantısı, sözleşme no. */
+    lisans: text().notNull(),
+    /** Ofis yüklemesinde onaylanan beyanın tam metni; kütüphanede boş. */
+    beyan: text(),
+    /** Beyan eden kullanıcı; hesap silinse de adı kayıtta kalır. */
+    beyanEdenId: text().references((): AnyPgColumn => user.id, { onDelete: "set null" }),
+    beyanEdenAd: text(),
+    ...zamanDamgalari(),
+  },
+  (t) => [index().on(t.ofisId)],
+);
 
 // ── Better Auth tabloları. Tablo ve alan adları Better Auth'un beklediği gibi olmalı. ──
 
@@ -110,6 +174,10 @@ export const verification = pgTable(
 
 // ── İlanlar ve üretim ──
 
+/** İlanın müzik ve kapanış resmi seçimi: `ofis` şirketin varsayılanı · `yok` hiç · `secili` belirli kayıt (silinmişse şirket varsayılanı). */
+export const SECIMLER = ["ofis", "yok", "secili"] as const;
+export type Secim = (typeof SECIMLER)[number];
+
 export const ILAN_DURUMLARI = ["taslak", "uretiliyor", "kontrol_bekliyor", "onaylandi", "hata"] as const;
 export const ilanDurumu = pgEnum("ilan_durumu", ILAN_DURUMLARI);
 
@@ -130,6 +198,14 @@ export const ilan = pgTable(
     /** Üretilen ve kullanıcının düzenlediği senaryo (`SenaryoSonucu`). Kullanılmadan önce her seferinde yeniden doğrulanır. */
     senaryo: jsonb().$type<unknown>(),
     hata: jsonb().$type<KayitliHata>(),
+    /** Boşsa ofisin varsayılan teması. */
+    tema: text(),
+    /** `ofis`: ofisin varsayılan müziği · `yok`: müziksiz · `secili`: `muzikId` (silinmişse ofis varsayılanı). */
+    muzikSecimi: text().$type<Secim>().notNull().default("ofis"),
+    muzikId: text().references(() => muzik.id, { onDelete: "set null" }),
+    /** Kapanış arka planı; seçim kuralları müzikle aynı. */
+    resimSecimi: text().$type<Secim>().notNull().default("ofis"),
+    resimId: text().references(() => sirketResmi.id, { onDelete: "set null" }),
     ...zamanDamgalari(),
   },
   (t) => [index().on(t.ofisId, t.guncelleme)],

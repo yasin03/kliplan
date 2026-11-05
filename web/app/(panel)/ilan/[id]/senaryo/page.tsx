@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { bulunamazsa404 } from "@/lib/hatalar";
 import { isOzeti } from "@/lib/ilan";
 import { ilanBaglami } from "@/lib/ilanBaglami";
+import { workerYokMu } from "@/lib/kuyruk";
 import { girisGerekli } from "@/lib/oturum";
 import { UretimButonu } from "../UretimButonu";
 import { UretimDurumu } from "../UretimDurumu";
@@ -11,17 +12,18 @@ import { SenaryoEditoru } from "./SenaryoEditoru";
 
 export default async function SenaryoSayfasi({ params }: PageProps<"/ilan/[id]/senaryo">) {
   const { id } = await params;
-  const { depo } = await girisGerekli();
+  const { depo, yetki } = await girisGerekli();
   const [{ ilan, fotograflar, json }, sonIs] = await bulunamazsa404(Promise.all([ilanBaglami(depo, id), depo.sonIs(id)]));
   const kayitli = ilan.senaryo as SenaryoSonucu | null;
   const uretiliyor = ilan.durum === "uretiliyor";
+  const workerYok = await workerYokMu(uretiliyor, sonIs);
   const fotoKartlari = await Promise.all(fotograflar.map(async (f) => ({ dosyaAdi: f.dosyaAdi, tur: f.tur, adres: await depo.dosyaBaglantisi(f.anahtar) })));
 
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold">Senaryo</h1>
       <AdimCubugu ilanId={id} etkin="senaryo" />
-      <UretimDurumu ilanId={id} uretiliyor={uretiliyor} hataVar={ilan.durum === "hata"} is={isOzeti(sonIs)} />
+      <UretimDurumu ilanId={id} uretiliyor={uretiliyor} hataVar={ilan.durum === "hata"} is={isOzeti(sonIs)} workerYok={workerYok} admin={yetki.admin} />
 
       {kayitli && json.basarili ? (
         <>

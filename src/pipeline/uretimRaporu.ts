@@ -1,3 +1,4 @@
+import { TEMALAR, VARSAYILAN_TEMA } from "../remotion/temalar.js";
 import { kontrolMaddeleri } from "./kontrolListesi.js";
 import type { Iletisim, Sahne } from "../remotion/tipler.js";
 import type { Ilan } from "../schema/ilan.js";
@@ -56,6 +57,10 @@ export function uretimRaporu(v: UretimRaporuVerisi): string {
     ["Emlak ofisi", ilan.emlakOfisi, "emlakOfisi", "rozet, kapanış kartı, dış ses"],
   ];
   if (v.iletisim.konum) kritik.push(["Konum", v.iletisim.konum, "konum", metinde.has("konum") ? "kapanış kartı, sahne metni" : "kapanış kartı"]);
+  const sirketAdlari = { web: "Web", adres: "Adres", yetkili: "Yetkili", eposta: "E-posta" } as const;
+  for (const [ad, deger] of Object.entries(ilan.sirketBilgileri ?? {}) as [keyof typeof sirketAdlari, string][]) {
+    kritik.push([sirketAdlari[ad], deger, `sirketBilgileri.${ad}`, "kapanış kartı"]);
+  }
   for (const ad of ["netM2"] as const) {
     const y = metinde.get(ad);
     if (y) kritik.push([AD[ad], y.ekran, y.kaynak, "sahne metni"]);
@@ -79,6 +84,14 @@ export function uretimRaporu(v: UretimRaporuVerisi): string {
     `- Senaryo: ${usd(v.maliyet.senaryoUsd)}${onbellek(v.maliyet.senaryoOnbellekten)}`,
     `- Ses: ${usd(v.maliyet.sesUsd)} (${v.maliyet.sesApiCagrisi} API çağrısı, ${v.maliyet.sesOnbellekten} sahne önbellekten)`,
     `- **Toplam tahmini API maliyeti: ${usd(v.maliyet.senaryoUsd + v.maliyet.sesUsd)}**`,
+    "",
+    "## Görünüm ve müzik",
+    "",
+    `- Tema: ${TEMALAR[ilan.tema ?? VARSAYILAN_TEMA].ad} · Vurgu rengi: ${ilan.vurguRengi ?? "temanın kendi rengi"} · Logo: ${ilan.logo ? "var" : "yok (yalnızca ofis adı)"}`,
+    `- Kapanış arka planı: ${ilan.kapanisResmi ? "şirket resmi" : "sahnenin ilan fotoğrafı"}`,
+    ...(ilan.muzik
+      ? [`- Müzik: \`${hucre(ilan.muzik.dosya)}\``, `- Ticari kullanım izni: ${hucre(ilan.muzik.lisans)}`, ...(ilan.muzik.beyan ? [`- Beyan: ${hucre(ilan.muzik.beyan)}`] : [])]
+      : ["- Müzik: yok"]),
     "",
     "## Sahneler",
     "",

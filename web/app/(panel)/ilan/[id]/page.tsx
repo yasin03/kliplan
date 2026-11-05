@@ -2,6 +2,8 @@ import { CircleCheck, CircleDashed, Pencil } from "lucide-react";
 import Link from "next/link";
 import { tutarlilikKontrolu } from "@cekirdek/pipeline/dogrulama.js";
 import { KontrolRaporu } from "@cekirdek/pipeline/kontrolRaporu.js";
+import { vurguHatasi } from "@cekirdek/pipeline/renk.js";
+import { TEMA_ADLARI, type TemaAdi, temaAdiMi } from "@cekirdek/remotion/temalar.js";
 import { cozunurlukUyarisi } from "@cekirdek/veri/fotografIsleme.js";
 import { ilanBilgiSemasi, type IlanBilgileri } from "@cekirdek/veri/ilanFormu.js";
 import { DurumRozeti } from "@/components/DurumRozeti";
@@ -9,8 +11,11 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { bulunamazsa404 } from "@/lib/hatalar";
 import { boyutMetni, fiyatMetni, ilanBasligi, isOzeti, tarihMetni } from "@/lib/ilan";
+import { gorunumSecenekleri, secimDegeri } from "@/lib/gorunumSecenekleri";
 import { ilanBaglami } from "@/lib/ilanBaglami";
+import { workerYokMu } from "@/lib/kuyruk";
 import { girisGerekli } from "@/lib/oturum";
+import { GorunumKarti } from "./GorunumKarti";
 import { IlanSilButonu } from "./IlanSilButonu";
 import { UretimButonu } from "./UretimButonu";
 import { UretimDurumu } from "./UretimDurumu";
@@ -20,8 +25,16 @@ export default async function IlanSayfasi({ params }: PageProps<"/ilan/[id]">) {
   const { id } = await params;
   const { depo, yetki } = await girisGerekli();
   const [{ ilan, ofis, fotograflar, json }, sonIs, videolar] = await bulunamazsa404(Promise.all([ilanBaglami(depo, id), depo.sonIs(id), depo.videolar(id)]));
+  const secenekler = await gorunumSecenekleri(depo, ofis);
+  const okunmayanTemalar: Partial<Record<TemaAdi, string>> = {};
+  for (const ad of TEMA_ADLARI) {
+    const hata = vurguHatasi(ofis.vurguRengi, ad);
+    if (hata) okunmayanTemalar[ad] = hata;
+  }
   const veri = ilan.veri as Partial<IlanBilgileri>;
   const uretiliyor = ilan.durum === "uretiliyor";
+  // İş sıradaysa worker'ın bağlı olup olmadığına bakılır; yoksa panel "sırada bekliyor"da sessizce takılmaz.
+  const workerYok = await workerYokMu(uretiliyor, sonIs);
   const senaryoVar = Boolean(ilan.senaryo);
   const sonVideo = videolar[0];
 
@@ -46,7 +59,7 @@ export default async function IlanSayfasi({ params }: PageProps<"/ilan/[id]">) {
         <DurumRozeti durum={ilan.durum} />
       </div>
 
-      <UretimDurumu ilanId={id} uretiliyor={uretiliyor} hataVar={ilan.durum === "hata"} is={isOzeti(sonIs)} />
+      <UretimDurumu ilanId={id} uretiliyor={uretiliyor} hataVar={ilan.durum === "hata"} is={isOzeti(sonIs)} workerYok={workerYok} admin={yetki.admin} />
 
       <VideoBolumu depo={depo} ilanId={id} durum={ilan.durum} videolar={videolar} ilan={json.basarili ? json.ilan : null} />
 
@@ -135,6 +148,17 @@ export default async function IlanSayfasi({ params }: PageProps<"/ilan/[id]">) {
           </CardContent>
         </Card>
       ) : null}
+
+      <GorunumKarti
+        ilanId={id}
+        tema={temaAdiMi(ilan.tema) ? ilan.tema : null}
+        muzik={secimDegeri(ilan.muzikSecimi, ilan.muzikId)}
+        resim={secimDegeri(ilan.resimSecimi, ilan.resimId)}
+        secenekler={secenekler}
+        okunmayanTemalar={okunmayanTemalar}
+        kilitli={uretiliyor}
+        ayarlarAdresi={yetki.admin ? `/ayarlar?ofis=${ofis.id}` : "/ayarlar"}
+      />
 
       <div className="flex justify-between gap-2">
         <Link href="/" className={buttonVariants({ variant: "outline" })}>

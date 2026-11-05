@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import { TEMA_ADLARI, TEMALAR } from "@cekirdek/remotion/temalar.js";
 import { KULLANIM_DURUMLARI, type FormAlanlari } from "@cekirdek/veri/ilanFormu.js";
+import { ResimSecici } from "@/components/ResimSecici";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
+import type { GorunumSecenekleri } from "@/lib/gorunumSecenekleri";
+import { MuzikSecenekleri } from "../ayarlar/AyarlarFormu";
 import { type FormDurumu, ilanKaydet } from "./eylemler";
 
 type Props = {
@@ -17,11 +21,13 @@ type Props = {
   ilanId: string | null;
   baslangic: FormAlanlari;
   ofisAdi: string | null;
-  /** Yalnızca admin yeni ilan açarken: ilanın ofisi seçilir. */
+  /** Yalnızca admin yeni ilan açarken: ilanın şirketi seçilir. */
   ofisler?: { id: string; ad: string }[];
+  /** Tema, müzik ve kapanış resmi seçenekleri. Admin yeni ilan açarken şirket henüz belli olmadığı için verilmez. */
+  gorunum?: GorunumSecenekleri;
 };
 
-export function IlanFormu({ ilanId, baslangic, ofisAdi, ofisler }: Props) {
+export function IlanFormu({ ilanId, baslangic, ofisAdi, ofisler, gorunum }: Props) {
   const [durum, gonder, bekliyor] = useActionState<FormDurumu, FormData>(ilanKaydet.bind(null, ilanId), {
     hatalar: {},
     mesaj: null,
@@ -33,8 +39,8 @@ export function IlanFormu({ ilanId, baslangic, ofisAdi, ofisler }: Props) {
     // Gönderimden sonra React formu sıfırlar; anahtar değişince alanlar dönen değerlerle yeniden kurulur.
     <form action={gonder} key={JSON.stringify(d)} className="flex flex-col gap-4" noValidate>
       {ofisler ? (
-        <Bolum baslik="Ofis" aciklama="Yönetici olarak ilanı hangi ofis adına açtığınızı seçin.">
-          <Alan ad="ofisId" etiket="Ofis" hata={h.ofisId}>
+        <Bolum baslik="Şirket" aciklama="Yönetici olarak ilanı hangi şirket adına açtığınızı seçin. Tema, müzik ve kapanış resmi şirketin varsayılanlarıyla başlar; ilan sayfasından değiştirilebilir.">
+          <Alan ad="ofisId" etiket="Şirket" hata={h.ofisId}>
             <NativeSelect id="ofisId" name="ofisId" defaultValue={d.ofisId ?? ""} className="w-full" aria-invalid={Boolean(h.ofisId)}>
               <NativeSelectOption value="">Seçin</NativeSelectOption>
               {ofisler.map((o) => (
@@ -79,7 +85,7 @@ export function IlanFormu({ ilanId, baslangic, ofisAdi, ofisler }: Props) {
 
       <Bolum
         baslik="İletişim"
-        aciklama={`Videonun sonunda gösterilir; video üretmek için ikisi de doğrulanmış olmalı.${ofisAdi ? ` Ofis adı: ${ofisAdi}.` : ""}`}
+        aciklama={`Videonun sonunda gösterilir; video üretmek için ikisi de doğrulanmış olmalı.${ofisAdi ? ` Şirket adı: ${ofisAdi}.` : ""}`}
       >
         <Izgara>
           <MetinAlani ad="telefon.deger" etiket="Telefon" d={d} h={h} tur="tel" yerTutucu="0505 709 44 88" />
@@ -132,6 +138,35 @@ export function IlanFormu({ ilanId, baslangic, ofisAdi, ofisler }: Props) {
           <Input id="kiraDurumu.not" name="kiraDurumu.not" defaultValue={d["kiraDurumu.not"] ?? ""} />
         </Alan>
       </Bolum>
+
+      {gorunum ? (
+        <Bolum baslik="Görünüm" aciklama="Videonun teması, fon müziği ve kapanış sahnesinin arka planı. Değiştirmek senaryoyu silmez; video yeniden üretilir.">
+          <Izgara>
+            <Alan ad="gorunum.tema" etiket="Tema">
+              <NativeSelect id="gorunum.tema" name="gorunum.tema" defaultValue={d["gorunum.tema"] ?? ""} className="w-full">
+                <NativeSelectOption value="">Şirket varsayılanı ({gorunum.ofisTemaAdi})</NativeSelectOption>
+                {TEMA_ADLARI.map((ad) => (
+                  <NativeSelectOption key={ad} value={ad}>
+                    {TEMALAR[ad].ad}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Alan>
+            <Alan ad="gorunum.muzik" etiket="Müzik">
+              <NativeSelect id="gorunum.muzik" name="gorunum.muzik" defaultValue={d["gorunum.muzik"] ?? ""} className="w-full">
+                <NativeSelectOption value="">Şirket varsayılanı ({gorunum.ofisMuzigi ?? "müziksiz"})</NativeSelectOption>
+                <NativeSelectOption value="yok">Müziksiz</NativeSelectOption>
+                <MuzikSecenekleri muzikler={gorunum.muzikler} />
+              </NativeSelect>
+            </Alan>
+          </Izgara>
+          <div className="flex flex-col gap-1.5">
+            <Label>Kapanış arka planı</Label>
+            <p className="text-xs text-muted-foreground">Son sahnede (fiyat ve telefon kartı) arkada görünür. Şirket resimleri Şirket Ayarları'ndan yüklenir.</p>
+            <ResimSecici ad="gorunum.resim" secenekler={gorunum.ilanResimSecenekleri} varsayilan={d["gorunum.resim"] ?? ""} />
+          </div>
+        </Bolum>
+      ) : null}
 
       {durum.mesaj ? (
         <Alert variant="destructive" aria-live="polite">

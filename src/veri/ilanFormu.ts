@@ -1,4 +1,6 @@
 import type { z } from "zod";
+import { vurguHatasi } from "../pipeline/renk.js";
+import { VARSAYILAN_TEMA } from "../remotion/temalar.js";
 import { alanYolu, turkceHataHaritasi } from "../schema/hatalar.js";
 import { FOTOGRAF_TURLERI, type FotografTuru, type Ilan, ilanSemasi } from "../schema/ilan.js";
 
@@ -9,14 +11,17 @@ import { FOTOGRAF_TURLERI, type FotografTuru, type Ilan, ilanSemasi } from "../s
 
 /**
  * Formda girilen bilgiler. Fotoğraflar ayrı tabloda; ofis adı ofis kaydından gelir.
- * Logo, vurgu rengi ve müzik ofis ayarlarında (6.7), telaffuz sözlüğü şimdilik yalnızca CLI'da.
+ * Logo, vurgu rengi, tema ve müzik ofis ayarlarından ve ilanın görünüm seçiminden (`gorunum.ts`), telaffuz sözlüğü şimdilik yalnızca CLI'da.
  */
 export const ilanBilgiSemasi = ilanSemasi.omit({
   fotograflar: true,
   emlakOfisi: true,
+  tema: true,
   logo: true,
   vurguRengi: true,
   muzik: true,
+  kapanisResmi: true,
+  sirketBilgileri: true,
   telaffuz: true,
 });
 export type IlanBilgileri = z.infer<typeof ilanBilgiSemasi>;
@@ -191,17 +196,22 @@ export type IlanJsonuSonucu = { basarili: true; ilan: Ilan } | { basarili: false
 /**
  * Veritabanındaki ilan, ofis ve fotoğraf kayıtlarından pipeline'ın okuduğu `ilan.json`'u kurar.
  * Worker (6.5) bu dosyayı geçici klasöre yazar; panel eksikleri göstermek için kullanır.
+ * `gorunum`: tema, vurgu rengi, logo ve müzik (`gorunumAlanlari`).
  */
 export function ilanJsonuOlustur(
   veri: Record<string, unknown>,
   ofis: { ad: string },
   fotograflar: readonly { dosyaAdi: string; tur: string }[],
+  gorunum: Partial<Pick<Ilan, "tema" | "vurguRengi" | "logo" | "muzik" | "kapanisResmi" | "sirketBilgileri">> = {},
 ): IlanJsonuSonucu {
   const sonuc = ilanSemasi.safeParse(
-    { ...veri, emlakOfisi: ofis.ad, fotograflar: fotograflar.map((f) => ({ dosya: f.dosyaAdi, tur: f.tur })) },
+    { ...veri, ...gorunum, emlakOfisi: ofis.ad, fotograflar: fotograflar.map((f) => ({ dosya: f.dosyaAdi, tur: f.tur })) },
     { error: turkceHataHaritasi },
   );
   if (sonuc.success) {
+    // Okunmayan vurgu rengiyle video üretilmez (CLI'da da doğrulama hatası); para harcamadan önce burada söylenir.
+    const vurgu = vurguHatasi(sonuc.data.vurguRengi, sonuc.data.tema ?? VARSAYILAN_TEMA);
+    if (vurgu) return { basarili: false, hatalar: [`Vurgu rengi: ${vurgu} Renk şirket ayarlarında, tema ilanın görünüm bölümünde değiştirilir.`] };
     // Kapanış kartı bu üç bilgiyle kurulur (`iletisimBilgisi`); onaysızsa video üretilemez.
     const { fiyatTl, telefon, yetkiBelgeNo } = sonuc.data;
     const onaysiz = [!fiyatTl.onayli && "fiyat", !telefon.onayli && "telefon", !yetkiBelgeNo.onayli && "yetki belge numarası"].filter(Boolean);

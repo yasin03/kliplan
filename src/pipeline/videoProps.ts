@@ -17,13 +17,18 @@ export function iletisimBilgisi(ilan: Ilan): Iletisim {
       `Kapanış sahnesi için ${eksikler.join(", ")} onaylı olmalı. Emlakçıyla doğrulayıp ilan.json'da "onayli": true yapın.`,
     );
   }
+  const ekSatirlar = SIRKET_SATIRLARI.map((ad) => ilan.sirketBilgileri?.[ad]).filter((d): d is string => Boolean(d));
   return {
     fiyat: fiyatEkranMetni(ilan.fiyatTl.deger),
     telefon: ilan.telefon.deger,
     yetkiBelgeNo: ilan.yetkiBelgeNo.deger,
     konum: ilan.konum.onayli ? konumEkranMetni(ilan.konum) : undefined,
+    ...(ekSatirlar.length ? { ekSatirlar } : {}),
   };
 }
+
+/** Kapanış kartındaki şirket bilgilerinin sırası. */
+const SIRKET_SATIRLARI = ["web", "adres", "yetkili", "eposta"] as const;
 
 export function videoPropsOlustur(ilan: Ilan, sahneler: Sahne[], hazirlik: HazirlikSonucu): VideoProps {
   for (const [sira, sahne] of sahneler.entries()) {
@@ -37,6 +42,8 @@ export function videoPropsOlustur(ilan: Ilan, sahneler: Sahne[], hazirlik: Hazir
     ofis: { ad: ilan.emlakOfisi, logo: hazirlik.logo },
     iletisim: iletisimBilgisi(ilan),
     muzik: hazirlik.muzik,
+    kapanisFotografi: hazirlik.kapanisResmi,
     vurguRengi: ilan.vurguRengi,
+    tema: ilan.tema,
   };
 }

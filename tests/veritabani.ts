@@ -43,7 +43,7 @@ export async function testVeritabani(ad: string): Promise<Veritabani | null> {
 }
 
 export async function tablolariBosalt(db: Veritabani): Promise<void> {
-  await db.execute(sql`truncate table "user", ofis, session, account, verification, ilan, fotograf, uretim_isi, video cascade`);
+  await db.execute(sql`truncate table "user", ofis, session, account, verification, ilan, fotograf, uretim_isi, video, muzik, sirket_resmi cascade`);
 }
 
 /** Yetki testleri için giriş bilgisi olmayan sade kullanıcı kaydı. */

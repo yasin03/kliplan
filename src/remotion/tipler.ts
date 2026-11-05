@@ -1,3 +1,5 @@
+import type { TemaAdi } from "./temalar.js";
+
 export const KOMPOZISYON_ID = "IlanVideosu";
 
 export type Sahne = {
@@ -26,6 +28,8 @@ export type Iletisim = {
   telefon: string;
   yetkiBelgeNo: string;
   konum?: string | undefined;
+  /** Şirketin kapanışta göstermeyi seçtiği bilgiler (web, adres, yetkili, e-posta), ekrandaki haliyle. */
+  ekSatirlar?: string[] | undefined;
 };
 
 export type VideoProps = {
@@ -38,8 +42,12 @@ export type VideoProps = {
     logo: string | null;
   };
   iletisim: Iletisim;
-  /** Ofise özel vurgu rengi (`#RRGGBB`). Verilmezse temadaki renk kullanılır. */
+  /** Renk teması. Verilmezse koyu tema. */
+  tema?: TemaAdi | undefined;
+  /** Ofise özel vurgu rengi (`#RRGGBB`). Verilmezse temanın kendi rengi kullanılır. */
   vurguRengi?: string | undefined;
+  /** Kapanış sahnesinin arka planı (şirket resmi). Verilmezse sahnenin kendi fotoğrafı. */
+  kapanisFotografi?: HazirFotograf | null | undefined;
   /** `public` klasörüne göre fon müziği yolu. Verilmezse müzik çalmaz. */
   muzik?: string | null | undefined;
 };

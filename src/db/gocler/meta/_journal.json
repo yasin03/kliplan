@@ -29,6 +29,20 @@
       "when": 1793873062393,
       "tag": "0003_video_test",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793885393829,
+      "tag": "0004_gorunum_ve_muzik",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793892472574,
+      "tag": "0005_sirket_bilgileri",
+      "breakpoints": true
     }
   ]
 }

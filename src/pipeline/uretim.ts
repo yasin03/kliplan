@@ -99,6 +99,7 @@ async function renderOzeti(props: VideoProps, publicKlasoru: string): Promise<st
     ...props.sahneler.flatMap((s) => (s.ses ? [s.ses.src] : [])),
     props.ofis.logo,
     props.muzik,
+    props.kapanisFotografi?.src,
   ].filter((d): d is string => Boolean(d));
   for (const d of dosyalar) {
     const { size, mtimeMs } = await stat(path.join(publicKlasoru, d));

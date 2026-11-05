@@ -26,3 +26,22 @@ export async function geciciIlanKlasoru(ilanJson: string | object, fotograflar: 
 }
 
 export const TEMURLAR_FOTOGRAFLARI = (temurlarVerisi().fotograflar as { dosya: string }[]).map((f) => f.dosya);
+
+/** Sessiz 16 bit mono WAV (müzik yükleme testleri için). */
+export function sessizWav(saniye: number, ornekleme = 8000): Buffer {
+  const veri = saniye * ornekleme * 2;
+  const b = Buffer.alloc(44 + veri);
+  b.write("RIFF", 0);
+  b.writeUInt32LE(36 + veri, 4);
+  b.write("WAVEfmt ", 8);
+  b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20);
+  b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(ornekleme, 24);
+  b.writeUInt32LE(ornekleme * 2, 28);
+  b.writeUInt16LE(2, 32);
+  b.writeUInt16LE(16, 34);
+  b.write("data", 36);
+  b.writeUInt32LE(veri, 40);
+  return b;
+}

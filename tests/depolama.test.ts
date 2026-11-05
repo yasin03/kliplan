@@ -89,3 +89,16 @@ describe("indirme bağlantısı ve aralık", () => {
     expect(aralikCoz(baslik, 1000)).toEqual(beklenen);
   });
 });
+
+describe("yerel depoda önekle silme", () => {
+  it("ofisin tamamını silebiliyor; klasör dışına çıkan öneki reddediyor", async () => {
+    const depo = new YerelDepolama(await mkdtemp(path.join(tmpdir(), "kliplan-onek-")), "gizli");
+    await depo.yaz("ofis/a1/logo/l.png", Buffer.from("l"), "image/png");
+    await depo.yaz("ofis/a2/logo/l.png", Buffer.from("l"), "image/png");
+    await depo.onekSil("ofis/a1/");
+    await expect(depo.oku("ofis/a1/logo/l.png")).rejects.toThrow();
+    expect((await depo.oku("ofis/a2/logo/l.png")).toString()).toBe("l");
+    await expect(depo.onekSil("../")).rejects.toThrow("Geçersiz");
+    await expect(depo.onekSil("ofis/")).rejects.toThrow("Geçersiz");
+  });
+});

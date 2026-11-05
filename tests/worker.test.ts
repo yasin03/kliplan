@@ -13,7 +13,8 @@ import { MockTtsProvider } from "../src/providers/MockTtsProvider.js";
 import { depoOlustur, DuzenlemeHatasi } from "../src/veri/depo.js";
 import { ilanFormunuDogrula, veriyiFormaCevir } from "../src/veri/ilanFormu.js";
 import { BulunamadiHatasi, ErisimHatasi, type Yetki } from "../src/veri/yetki.js";
-import { type IsBaglami, isiCalistir, isiHataylaKapat } from "../src/worker/isler.js";
+import { AdimHatasi } from "../src/pipeline/uretim.js";
+import { type IsBaglami, isiCalistir, isiHataylaKapat, kayitliHata } from "../src/worker/isler.js";
 import { tablolariBosalt, testKullanicisi, testVeritabani } from "./veritabani.js";
 import { gercekFotografGibi, temurlarVerisi } from "./yardimci.js";
 
@@ -207,7 +208,7 @@ describe.skipIf(!testDb)("üretim işleri (worker)", () => {
 
     it("bilgiler değişince eski video onaylanamıyor; yeniden üretim onaylı ilanı tekrar kontrole düşürüyor", async () => {
       const { kayit, gercek, video } = await videolu();
-      await depo(a).ilanBilgileriniKaydet(kayit.id, ilanBilgileri());
+      await depo(a).ilanBilgileriniKaydet(kayit.id, { ...ilanBilgileri(), mutfak: "Kapalı mutfak" });
       await expect(depo(a).videoOnayla(video.id, [])).rejects.toThrow("onaya hazır değil");
 
       await isiCalistir(gercek, (await depo(a).uretimBaslat(kayit.id, "senaryo")).id);
@@ -222,5 +223,14 @@ describe.skipIf(!testDb)("üretim işleri (worker)", () => {
         [1, false],
       ]);
     });
+  });
+});
+
+describe("panel hata metni", () => {
+  it("yapay zeka yoğunluk (503) ve kota (429) hatasında beklemeyi söylüyor, diğer senaryo hatalarında düzenlemeyi", () => {
+    const yogun = kayitliHata(new AdimHatasi("3/6 Senaryo", 'Gemini API hatası (503): {"error":{"code":503}}', ""));
+    expect(yogun.cozum).toContain("çok yoğun");
+    expect(kayitliHata(new AdimHatasi("4/6 Dış ses", "Azure hatası (429)", "")).cozum).toContain("kullanım sınırı");
+    expect(kayitliHata(new AdimHatasi("3/6 Senaryo", "Sahne 2: rakam var", "")).cozum).toContain("elle düzenleyin");
   });
 });

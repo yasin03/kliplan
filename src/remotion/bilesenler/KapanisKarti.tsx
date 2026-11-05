@@ -1,6 +1,5 @@
 import { spring, useCurrentFrame, useVideoConfig } from "remotion";
-import { tema } from "../tema.js";
-import { useVurgu } from "../vurgu.js";
+import { useGorunum } from "../gorunum.js";
 import type { Iletisim, VideoProps } from "../tipler.js";
 import { OfisRozeti } from "./OfisRozeti.js";
 
@@ -11,15 +10,15 @@ export const KapanisKarti: React.FC<Props> = ({ iletisim, ofis }) => {
   const kare = useCurrentFrame();
   const { fps } = useVideoConfig();
   const giris = spring({ frame: kare - 8, fps, config: { damping: 200 } });
-  const vurgu = useVurgu();
+  const { tema, vurgu } = useGorunum();
 
   return (
     <div
       style={{
         opacity: giris,
         transform: `scale(${0.96 + giris * 0.04})`,
-        background: `${tema.renkler.lacivert}EB`,
-        borderRadius: 40,
+        background: `${tema.kart}EB`,
+        borderRadius: tema.kose,
         borderTop: `10px solid ${vurgu}`,
         padding: "48px 52px",
         display: "flex",
@@ -32,12 +31,12 @@ export const KapanisKarti: React.FC<Props> = ({ iletisim, ofis }) => {
         {iletisim.fiyat}
       </div>
       {iletisim.konum ? (
-        <div style={{ color: tema.renkler.beyazSoluk, fontSize: 36, fontWeight: 500 }}>{iletisim.konum}</div>
+        <div style={{ color: tema.yaziSoluk, fontSize: 36, fontWeight: 500 }}>{iletisim.konum}</div>
       ) : null}
-      <div style={{ height: 2, background: "rgba(255, 255, 255, 0.18)", margin: "10px 0" }} />
+      <div style={{ height: 2, background: tema.ayrac, margin: "10px 0" }} />
       <div
         style={{
-          color: tema.renkler.beyaz,
+          color: tema.yazi,
           fontSize: 76,
           fontWeight: 800,
           fontVariantNumeric: "tabular-nums",
@@ -48,7 +47,16 @@ export const KapanisKarti: React.FC<Props> = ({ iletisim, ofis }) => {
         {iletisim.telefon}
       </div>
       <OfisRozeti ad={ofis.ad} logo={ofis.logo} boyut={42} />
-      <div style={{ color: tema.renkler.beyazSoluk, fontSize: 30, fontWeight: 500 }}>
+      {iletisim.ekSatirlar?.length ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {iletisim.ekSatirlar.map((satir) => (
+            <div key={satir} style={{ color: tema.yazi, fontSize: 32, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {satir}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <div style={{ color: tema.yaziSoluk, fontSize: 30, fontWeight: 500 }}>
         Yetki Belge No: {iletisim.yetkiBelgeNo}
       </div>
     </div>

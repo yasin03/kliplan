@@ -9,6 +9,8 @@ const TURLER: Record<string, string> = {
   ".webp": "image/webp",
   ".mp4": "video/mp4",
   ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".wav": "audio/wav",
   ".json": "application/json",
   ".md": "text/markdown; charset=utf-8",
 };

@@ -17,7 +17,9 @@ export function kontrolMaddeleri(ilan: Ilan, iletisim: Iletisim): KontrolMaddesi
   const maddeler: KontrolMaddesi[] = [
     {
       kod: "iletisim",
-      metin: `Fiyat, telefon ve yetki belge numarası doğru (${iletisim.fiyat}, ${iletisim.telefon}, ${iletisim.yetkiBelgeNo}).`,
+      metin: iletisim.ekSatirlar?.length
+        ? `Fiyat, telefon, yetki belge numarası ve kapanıştaki şirket bilgileri doğru (${[iletisim.fiyat, iletisim.telefon, iletisim.yetkiBelgeNo, ...iletisim.ekSatirlar].join(", ")}).`
+        : `Fiyat, telefon ve yetki belge numarası doğru (${iletisim.fiyat}, ${iletisim.telefon}, ${iletisim.yetkiBelgeNo}).`,
     },
     { kod: "ifade", metin: "Dış seste ilanda olmayan veya abartılı bir ifade yok." },
     { kod: "okunus", metin: "Ofis, mahalle ve marka adları doğru okunuyor.", cliNotu: "yanlışsa `telaffuz.json`" },
