@@ -2,14 +2,30 @@ import { CircleCheck, Download, FileText, FlaskConical } from "lucide-react";
 import { kontrolMaddeleri } from "@cekirdek/pipeline/kontrolListesi.js";
 import { iletisimBilgisi } from "@cekirdek/pipeline/videoProps.js";
 import type { Depo } from "@cekirdek/veri/depo.js";
-import type { Ilan } from "@cekirdek/schema/ilan.js";
+import { GIZLENEBILIR_ALAN_ADLARI, type GizlenebilirAlan, type Ilan } from "@cekirdek/schema/ilan.js";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { boyutMetni, tarihMetni } from "@/lib/ilan";
 import { OnayFormu } from "./OnayFormu";
 
 type Video = Awaited<ReturnType<Depo["videolar"]>>[number];
+
+/** Sürümde videodan çıkarılan bilgiler, ör. "Fiyat gizli". Eski sürümlerde liste boştur. */
+function GizliRozetleri({ alanlar }: { alanlar: string[] }) {
+  const adlar = alanlar.map((a) => GIZLENEBILIR_ALAN_ADLARI[a as GizlenebilirAlan] ?? a);
+  if (!adlar.length) return null;
+  return (
+    <span className="flex flex-wrap gap-1">
+      {adlar.map((ad) => (
+        <Badge key={ad} variant="secondary">
+          {ad} gizli
+        </Badge>
+      ))}
+    </span>
+  );
+}
 
 type Props = {
   depo: Depo;
@@ -24,6 +40,10 @@ type Props = {
 export async function VideoBolumu({ depo, ilanId, durum, videolar, ilan }: Props) {
   const [son, ...oncekiler] = videolar;
   if (!son) return null;
+  // Onaylanmış önceki sürümler de indirilebilir (ör. biri fiyatlı, biri fiyatsız).
+  const oncekiIndirmeler = new Map(
+    await Promise.all(oncekiler.filter((v) => v.onayZamani).map(async (v) => [v.id, await depo.videoIndirmeBaglantisi(v.id, "video")] as const)),
+  );
 
   const [izle, kapak, rapor] = await Promise.all([
     depo.dosyaBaglantisi(son.videoAnahtari),
@@ -39,8 +59,11 @@ export async function VideoBolumu({ depo, ilanId, durum, videolar, ilan }: Props
     <Card>
       <CardHeader>
         <CardTitle>Video · sürüm {son.surum}</CardTitle>
-        <CardDescription>
-          {son.sureSn.toFixed(1)} sn · {boyutMetni(son.boyutBayt)} · {tarihMetni(son.olusturma)}
+        <CardDescription className="flex flex-col gap-2">
+          <span>
+            {son.sureSn.toFixed(1)} sn · {boyutMetni(son.boyutBayt)} · {tarihMetni(son.olusturma)}
+          </span>
+          <GizliRozetleri alanlar={son.gizliAlanlar} />
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-6 md:grid-cols-[minmax(0,320px)_1fr]">
@@ -105,9 +128,17 @@ export async function VideoBolumu({ depo, ilanId, durum, videolar, ilan }: Props
             <summary className="cursor-pointer font-medium">Önceki sürümler ({oncekiler.length})</summary>
             <ul className="mt-2 flex flex-col gap-1 text-muted-foreground">
               {oncekiler.map((v) => (
-                <li key={v.id}>
-                  Sürüm {v.surum} · {tarihMetni(v.olusturma)} · {v.sureSn.toFixed(1)} sn
-                  {v.onayZamani ? ` · onaylandı (${tarihMetni(v.onayZamani)})` : v.test ? " · test" : ""}
+                <li key={v.id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span>
+                    Sürüm {v.surum} · {tarihMetni(v.olusturma)} · {v.sureSn.toFixed(1)} sn
+                    {v.onayZamani ? ` · onaylandı (${tarihMetni(v.onayZamani)})` : v.test ? " · test" : ""}
+                  </span>
+                  <GizliRozetleri alanlar={v.gizliAlanlar} />
+                  {oncekiIndirmeler.has(v.id) ? (
+                    <a href={oncekiIndirmeler.get(v.id)} className="inline-flex items-center gap-1 text-foreground underline">
+                      <Download className="size-3.5" /> İndir
+                    </a>
+                  ) : null}
                 </li>
               ))}
             </ul>

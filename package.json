@@ -24,6 +24,7 @@
     "ofis-sil": "tsx src/cli/ofisSil.ts",
     "temizlik": "tsx src/cli/temizlik.ts",
     "yedek": "tsx src/cli/yedek.ts",
+    "muzik:kutuphane": "tsx src/cli/muzikKutuphanesi.ts",
     "db:uret": "drizzle-kit generate",
     "db:uygula": "drizzle-kit migrate",
     "web": "npm run dev -w @kliplan/web",

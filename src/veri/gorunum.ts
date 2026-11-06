@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { muzik, Secim, sirketResmi } from "../db/sema.js";
+import type { muzik, Secim, sirketLogosu, sirketResmi } from "../db/sema.js";
 import { VURGU_DESENI, vurguHatasi } from "../pipeline/renk.js";
 import { TEMA_ADLARI, type TemaAdi, temaAdiMi, VARSAYILAN_TEMA } from "../remotion/temalar.js";
 import type { Ilan } from "../schema/ilan.js";
@@ -15,6 +15,7 @@ export { SECIMLER, type Secim } from "../db/sema.js";
 export { KAPANIS_ALANI_ADLARI, KAPANIS_ALANLARI, type KapanisAlani } from "./kapanisAlanlari.js";
 export type MuzikKaydi = typeof muzik.$inferSelect;
 export type ResimKaydi = typeof sirketResmi.$inferSelect;
+export type LogoKaydi = typeof sirketLogosu.$inferSelect;
 type SirketBilgisi = {
   adres: string | null;
   il: string | null;
@@ -28,11 +29,19 @@ type SirketBilgisi = {
 type OfisGorunumu = Partial<SirketBilgisi> & {
   tema: string;
   vurguRengi: string | null;
-  logoAnahtari: string | null;
+  varsayilanLogoId?: string | null;
   varsayilanMuzikId: string | null;
   varsayilanResimId?: string | null;
 };
-type IlanSecimi = { tema: string | null; muzikSecimi: Secim; muzikId: string | null; resimSecimi?: Secim; resimId?: string | null };
+type IlanSecimi = {
+  tema: string | null;
+  muzikSecimi: Secim;
+  muzikId: string | null;
+  resimSecimi?: Secim;
+  resimId?: string | null;
+  logoSecimi?: Secim;
+  logoId?: string | null;
+};
 
 
 /** Panelde ve kontrol listesinde emlakçının onayladığı beyan. Değiştirilirse eski yüklemelerin kaydında eski metin kalır. */
@@ -57,6 +66,10 @@ export const ilanMuzikId = (ofis: Pick<OfisGorunumu, "varsayilanMuzikId">, ilan:
 /** Kapanış arka planı olacak şirket resminin kimliği; yoksa `null` (sahnenin ilan fotoğrafı). */
 export const ilanResimId = (ofis: Pick<OfisGorunumu, "varsayilanResimId">, ilan: Pick<IlanSecimi, "resimSecimi" | "resimId">) =>
   secilenId(ilan.resimSecimi ?? "ofis", ilan.resimId, ofis.varsayilanResimId);
+
+/** Videoda gösterilecek şirket logosunun kimliği; yoksa veya "videoda gösterme" seçildiyse `null` (yalnızca şirket adı). */
+export const ilanLogoId = (ofis: Pick<OfisGorunumu, "varsayilanLogoId">, ilan: Pick<IlanSecimi, "logoSecimi" | "logoId">) =>
+  secilenId(ilan.logoSecimi ?? "ofis", ilan.logoId, ofis.varsayilanLogoId);
 
 /** Bu ofis bu müziği kullanabilir mi: kütüphanedeki veya kendi yüklediği. */
 export const muzikKullanilabilir = (m: Pick<MuzikKaydi, "ofisId">, ofisId: string) => m.ofisId === null || m.ofisId === ofisId;
@@ -90,13 +103,19 @@ export function sirketBilgileri(ofis: Partial<SirketBilgisi>): NonNullable<Ilan[
 
 export type GorunumAlanlari = Pick<Ilan, "tema" | "vurguRengi" | "logo" | "muzik" | "kapanisResmi" | "sirketBilgileri">;
 
-/** `ilan.json`'un görünüm alanları. Kayıtlar `ilanMuzikId` ve `ilanResimId` ile bulunur (yoksa `null`). */
-export function gorunumAlanlari(ofis: OfisGorunumu, ilan: Pick<IlanSecimi, "tema">, muzikKaydi: MuzikKaydi | null, resimKaydi: ResimKaydi | null = null): GorunumAlanlari {
+/** `ilan.json`'un görünüm alanları. Kayıtlar `ilanMuzikId`, `ilanResimId` ve `ilanLogoId` ile bulunur (yoksa `null`). */
+export function gorunumAlanlari(
+  ofis: OfisGorunumu,
+  ilan: Pick<IlanSecimi, "tema">,
+  muzikKaydi: MuzikKaydi | null,
+  resimKaydi: ResimKaydi | null = null,
+  logoKaydi: Pick<LogoKaydi, "anahtar"> | null = null,
+): GorunumAlanlari {
   const bilgiler = sirketBilgileri(ofis);
   return {
     tema: ilanTemasi(ofis, ilan),
     ...(ofis.vurguRengi ? { vurguRengi: ofis.vurguRengi } : {}),
-    ...(ofis.logoAnahtari ? { logo: logoDosyaAdi(ofis.logoAnahtari) } : {}),
+    ...(logoKaydi ? { logo: logoDosyaAdi(logoKaydi.anahtar) } : {}),
     ...(muzikKaydi ? { muzik: { dosya: muzikDosyaAdi(muzikKaydi.anahtar), ...muzikIzni(muzikKaydi) } } : {}),
     ...(resimKaydi ? { kapanisResmi: KAPANIS_RESMI_DOSYASI } : {}),
     ...(bilgiler ? { sirketBilgileri: bilgiler } : {}),
@@ -113,6 +132,7 @@ export type OfisAyarlari = SirketBilgisi & {
   tema: TemaAdi;
   varsayilanMuzikId: string | null;
   varsayilanResimId: string | null;
+  varsayilanLogoId: string | null;
 };
 export type AyarSonucu = { basarili: true; veri: OfisAyarlari } | { basarili: false; hatalar: AlanHatalari };
 
@@ -212,6 +232,7 @@ export function ofisAyarFormunuDogrula(alanlar: FormAlanlari): AyarSonucu {
       tema: tema as TemaAdi,
       varsayilanMuzikId: temiz("varsayilanMuzikId"),
       varsayilanResimId: temiz("varsayilanResimId"),
+      varsayilanLogoId: temiz("varsayilanLogoId"),
     },
   };
 }

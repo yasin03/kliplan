@@ -1,4 +1,4 @@
-import type { Ilan } from "../schema/ilan.js";
+import { gorunur, type Ilan, videoIlani } from "../schema/ilan.js";
 import { sayiKelimesi, siraKelimesi } from "./sayilar.js";
 import { BASLIK_EN_FAZLA_KARAKTER, EKRAN_METNI_EN_FAZLA_KARAKTER, KELIME_SINIRI, SAHNE_SINIRI, YASAKLI_IFADELER } from "./senaryoDogrulama.js";
 import type { YerTutucu, YerTutucuDegeri } from "./yerTutucu.js";
@@ -10,7 +10,8 @@ import type { YerTutucu, YerTutucuDegeri } from "./yerTutucu.js";
  */
 export type YzGirdisi = {
   emlakOfisi: string;
-  odaSayisi: string;
+  /** Emlakçı videoda gizlediyse verilmez. */
+  odaSayisi?: string;
   bina: string[];
   ozellikler: string[];
   kullanilabilirYerTutucular: Record<string, string>;
@@ -24,14 +25,18 @@ const YER_TUTUCU_ACIKLAMALARI: Record<YerTutucu, string> = {
   telefon: "telefon numarası (yalnızca başlıkta ve ekran metninde; dış seste kullanılamaz)",
 };
 
-export function yzGirdisiOlustur(ilan: Ilan, tablo: Partial<Record<YerTutucu, YerTutucuDegeri>>): YzGirdisi {
+/** Gizlenen bilgiler gönderilmez (`videoIlani`, `gorunur`). */
+export function yzGirdisiOlustur(kaynak: Ilan, tablo: Partial<Record<YerTutucu, YerTutucuDegeri>>): YzGirdisi {
+  const ilan = videoIlani(kaynak);
   const odalar = ilan.odaSayisi.split("+").map((s) => sayiKelimesi(Number(s)) ?? s);
   const bina: string[] = [];
-  if (ilan.binaYasi === 0) bina.push("Bina sıfır (yeni yapılmış).");
+  if (ilan.binaYasi === 0 && gorunur(ilan, "binaYasi")) bina.push("Bina sıfır (yeni yapılmış).");
   const kat = siraKelimesi(ilan.bulunduguKat);
   const katSayisi = sayiKelimesi(ilan.katSayisi);
-  if (kat && katSayisi) bina.push(`Daire, ${katSayisi} katlı binanın ${kat} katında.`);
-  else if (ilan.bulunduguKat === 0) bina.push("Daire zemin katta.");
+  if (gorunur(ilan, "kat")) {
+    if (kat && katSayisi) bina.push(`Daire, ${katSayisi} katlı binanın ${kat} katında.`);
+    else if (ilan.bulunduguKat === 0) bina.push("Daire zemin katta.");
+  }
   if (ilan.isitma) bina.push(`Isıtma: ${ilan.isitma}.`);
   if (ilan.mutfak) bina.push(`Mutfak: ${ilan.mutfak}.`);
   if (ilan.esyali) bina.push("Daire eşyalı.");
@@ -41,7 +46,7 @@ export function yzGirdisiOlustur(ilan: Ilan, tablo: Partial<Record<YerTutucu, Ye
 
   return {
     emlakOfisi: ilan.emlakOfisi,
-    odaSayisi: odalar.join(" artı "),
+    ...(gorunur(ilan, "odaSayisi") ? { odaSayisi: odalar.join(" artı ") } : {}),
     bina,
     ozellikler: ilan.ozellikler,
     kullanilabilirYerTutucular: Object.fromEntries(
@@ -68,7 +73,7 @@ Yapı kuralları:
 - Başlıklar en fazla ${BASLIK_EN_FAZLA_KARAKTER} karakter, iki-dört kelime.
 - Ekran metni (ekranMetni) en fazla ${EKRAN_METNI_EN_FAZLA_KARAKTER} karakter, iki-altı kelime. Başlığı tekrar etmesin, dış sesi kelimesi kelimesine yazmasın; birden çok bilgiyi " · " ile ayırabilirsin (ör. "Ankastre set · Bulaşık makinesi"). Aynı içerik kuralları burada da geçerli.
 - Her sahneye içeriğine uygun türde bir fotoğraf seç; dosya adını listeden birebir yaz. Aynı fotoğrafı art arda kullanma.
-- Son sahnede fiyatı {{fiyat}} ile ver ve iletişim için ofisin aranmasını iste.`;
+- Son sahnede iletişim için ofisin aranmasını iste; listede {{fiyat}} varsa fiyatı da {{fiyat}} ile ver. Listede olmayan bilgiden (ör. fiyat, konum, oda sayısı) hiç söz etme.`;
 
 export type Duzeltme = { oncekiCikti: unknown; hatalar: string[] };
 

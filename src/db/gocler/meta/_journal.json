@@ -43,6 +43,20 @@
       "when": 1793892472574,
       "tag": "0005_sirket_bilgileri",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793959555158,
+      "tag": "0006_gorunurluk_ve_logolar",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793959555635,
+      "tag": "0007_eski_logo_sutunu",
+      "breakpoints": true
     }
   ]
 }

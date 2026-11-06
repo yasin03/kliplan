@@ -1,5 +1,5 @@
 import { alanYolu, turkceHataHaritasi } from "../schema/hatalar.js";
-import type { Ilan } from "../schema/ilan.js";
+import { gorunur, type Ilan, videoIlani } from "../schema/ilan.js";
 import { type YzSenaryo, yzSenaryoSemasi } from "../schema/senaryo.js";
 import { izinliSayiKelimeleri, sayiKelimesi, TUM_SAYI_KELIMELERI } from "./sayilar.js";
 import {
@@ -156,7 +156,7 @@ function onaysizKokler(ilan: Ilan): { kok: string; alan: string }[] {
   }
   if (!ilan.esyali) kokler.push({ kok: "eşyalı", alan: "eşya durumu" });
   if (!ilan.krediyeUygun) kokler.push({ kok: "kredi", alan: "krediye uygunluk" });
-  if (ilan.binaYasi > 0) kokler.push({ kok: "sıfır bina", alan: "bina yaşı" }, { kok: "yeni bina", alan: "bina yaşı" });
+  if (ilan.binaYasi > 0 || !gorunur(ilan, "binaYasi")) kokler.push({ kok: "sıfır bina", alan: "bina yaşı" }, { kok: "yeni bina", alan: "bina yaşı" });
   return kokler;
 }
 
@@ -168,7 +168,7 @@ function metniDenetle(metin: string, yer: string, alanTuru: "baslik" | "disSes",
     if (!(YER_TUTUCULAR as readonly string[]).includes(ad)) {
       hatalar.push(`${yer}: bilinmeyen yer tutucu {{${ad}}}. Yalnızca ${YER_TUTUCULAR.map((y) => `{{${y}}}`).join(", ")} kullanılabilir.`);
     } else if (!tablo[ad as YerTutucu]) {
-      hatalar.push(`${yer}: {{${ad}}} onaylı olmayan bir bilgiye ait, kullanılamaz.`);
+      hatalar.push(`${yer}: {{${ad}}} onaylı olmayan veya videoda gizlenen bir bilgiye ait, kullanılamaz.`);
     } else if (alanTuru === "disSes" && SESTE_YASAK.includes(ad as YerTutucu)) {
       hatalar.push(`${yer}: {{${ad}}} dış seste kullanılamaz; telefon yerine "${ilan.emlakOfisi}" adı ile aranmasını söyleyin.`);
     }
@@ -210,18 +210,20 @@ function metniDenetle(metin: string, yer: string, alanTuru: "baslik" | "disSes",
     if (kokDeseni(kok).test(kucuk)) hatalar.push(`${yer}: "${kok}" doğrudan yazılamaz; ${oneri}.`);
   }
 
+  const odaGorunur = gorunur(ilan, "odaSayisi");
   const odaYazisi = kucult(ilan.odaSayisi.split("+").map((s) => sayiKelimesi(Number(s)) ?? s).join(" artı "));
   for (const eslesme of kucuk.matchAll(/(\p{L}+)\s+artı\s+(\p{L}+)/gu)) {
-    if (`${eslesme[1]} artı ${eslesme[2]}` !== odaYazisi) {
+    if (!odaGorunur) hatalar.push(`${yer}: oda sayısı videoda gizlendi, kullanılamaz: "${eslesme[0]}".`);
+    else if (`${eslesme[1]} artı ${eslesme[2]}` !== odaYazisi) {
       hatalar.push(`${yer}: oda sayısı ilandakinden farklı: "${eslesme[0]}" (ilanda "${odaYazisi}").`);
     }
   }
 
+  // Gizlenen bilginin sayısı metinde geçemez.
   const izinli = izinliSayiKelimeleri([
-    ...ilan.odaSayisi.split("+").map(Number),
-    ilan.bulunduguKat,
-    ilan.katSayisi,
-    ilan.binaYasi,
+    ...(odaGorunur ? ilan.odaSayisi.split("+").map(Number) : []),
+    ...(gorunur(ilan, "kat") ? [ilan.bulunduguKat, ilan.katSayisi] : []),
+    ...(gorunur(ilan, "binaYasi") ? [ilan.binaYasi] : []),
   ]);
   const kelimeler = kucuk.split(/[^\p{L}]+/u).filter(Boolean);
   for (const k of new Set(kelimeler)) {
@@ -234,8 +236,9 @@ function metniDenetle(metin: string, yer: string, alanTuru: "baslik" | "disSes",
 
 export type SenaryoDogrulamaSonucu = { senaryo: YzSenaryo; hatalar: [] } | { senaryo: null; hatalar: string[] };
 
-/** Yapay zeka çıktısını, kullanılmadan önce koddaki kurallarla denetler. Hata yoksa senaryoyu döner. */
-export function senaryoyuDogrula(cikti: unknown, baglam: DogrulamaBaglami): SenaryoDogrulamaSonucu {
+/** Yapay zeka çıktısını, kullanılmadan önce koddaki kurallarla denetler. Hata yoksa senaryoyu döner. Gizlenen bilgiler ilanda yokmuş gibi denetlenir. */
+export function senaryoyuDogrula(cikti: unknown, verilen: DogrulamaBaglami): SenaryoDogrulamaSonucu {
+  const baglam = { ...verilen, ilan: videoIlani(verilen.ilan) };
   const sema = yzSenaryoSemasi.safeParse(cikti, { error: turkceHataHaritasi });
   if (!sema.success) {
     return { senaryo: null, hatalar: sema.error.issues.map((s) => `Şema: ${alanYolu(s.path, "çıktı")}: ${s.message}`) };

@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FormSatiri } from "@/components/FormSatiri";
 import { authClient } from "@/lib/auth-client";
 
 const HATA_MESAJLARI: Record<string, string> = {
@@ -35,21 +35,19 @@ export function GirisFormu() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle className="text-xl">Giriş yap</CardTitle>
         <CardDescription>Size verilen e-posta ve şifreyle giriş yapın.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={gonder} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="eposta">E-posta</Label>
+          <FormSatiri ad="eposta" etiket="E-posta">
             <Input id="eposta" name="eposta" type="email" autoComplete="email" required />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="sifre">Şifre</Label>
+          </FormSatiri>
+          <FormSatiri ad="sifre" etiket="Şifre">
             <Input id="sifre" name="sifre" type="password" autoComplete="current-password" required />
-          </div>
+          </FormSatiri>
           {hata ? (
             <Alert variant="destructive">
               <AlertDescription>{hata}</AlertDescription>

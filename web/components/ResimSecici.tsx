@@ -20,10 +20,13 @@ type Props = {
   /** Kontrolsüz kullanım (form gönderimi). */
   varsayilan?: string;
   devreDisi?: boolean;
+  /** `logo`: yatay, koyu zeminde, kırpılmadan. Varsayılan dikey resim. */
+  bicim?: "dikey" | "logo";
 };
 
-/** Kapanış arka planı seçimi: küçük görseller arasında radyo düğmeleri. */
-export function ResimSecici({ ad, secenekler, deger, onDegistir, varsayilan, devreDisi }: Props) {
+/** Kapanış arka planı veya logo seçimi: küçük görseller arasında radyo düğmeleri. */
+export function ResimSecici({ ad, secenekler, deger, onDegistir, varsayilan, devreDisi, bicim = "dikey" }: Props) {
+  const oran = bicim === "logo" ? "aspect-[2/1]" : "aspect-[9/16]";
   return (
     <fieldset className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6" disabled={devreDisi}>
       {secenekler.map((s) => (
@@ -42,9 +45,14 @@ export function ResimSecici({ ad, secenekler, deger, onDegistir, varsayilan, dev
             {...(onDegistir ? { checked: deger === s.deger, onChange: () => onDegistir(s.deger) } : { defaultChecked: (varsayilan ?? "") === s.deger })}
           />
           {s.adres ? (
-            <img src={s.adres} alt="" className="aspect-[9/16] w-full rounded object-cover" loading="lazy" />
+            <img
+              src={s.adres}
+              alt=""
+              className={cn(oran, "w-full rounded", bicim === "logo" ? "bg-[#0B1F3A] object-contain p-2" : "object-cover")}
+              loading="lazy"
+            />
           ) : (
-            <span className="flex aspect-[9/16] w-full items-center justify-center rounded bg-muted text-muted-foreground">
+            <span className={cn(oran, "flex w-full items-center justify-center rounded bg-muted text-muted-foreground")}>
               <ImageOff className="size-5" aria-hidden />
             </span>
           )}

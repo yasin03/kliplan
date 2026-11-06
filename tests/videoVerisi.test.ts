@@ -103,3 +103,19 @@ describe("örnek sahne dosyaları", () => {
     }
   });
 });
+
+describe("videoda gizlenen kapanış bilgileri", () => {
+  it("gizlenen satırları vermiyor ve onaylarını aramıyor", () => {
+    const ilan = { ...temurlar(), gizli: ["fiyat", "telefon", "konum"] as Ilan["gizli"] };
+    ilan.fiyatTl.onayli = false;
+    ilan.telefon.onayli = false;
+    expect(iletisimBilgisi(ilan)).toEqual({ fiyat: undefined, telefon: undefined, yetkiBelgeNo: "0300206", konum: undefined });
+  });
+
+  it("gösterilen yetki belgesi onaysızsa üretmiyor", () => {
+    const ilan = temurlar();
+    ilan.yetkiBelgeNo.onayli = false;
+    expect(() => iletisimBilgisi(ilan)).toThrow(VideoVerisiHatasi);
+    expect(iletisimBilgisi({ ...ilan, gizli: ["yetkiBelgeNo"] }).yetkiBelgeNo).toBeUndefined();
+  });
+});

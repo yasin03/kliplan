@@ -1,7 +1,7 @@
 import { TEMALAR, VARSAYILAN_TEMA } from "../remotion/temalar.js";
 import { kontrolMaddeleri } from "./kontrolListesi.js";
 import type { Iletisim, Sahne } from "../remotion/tipler.js";
-import type { Ilan } from "../schema/ilan.js";
+import { GIZLENEBILIR_ALAN_ADLARI, type Ilan } from "../schema/ilan.js";
 import type { RaporMaddesi } from "./kontrolRaporu.js";
 import type { YerTutucu, YerTutucuDegeri } from "./yerTutucu.js";
 
@@ -50,12 +50,11 @@ export function uretimRaporu(v: UretimRaporuVerisi): string {
     "|---|---|---|---|",
   );
   const metinde = new Map(v.kullanilanYerTutucular.map((y) => [y.ad, y]));
-  const kritik: [string, string, string, string][] = [
-    ["Fiyat", v.iletisim.fiyat, "fiyatTl.deger", metinde.has("fiyat") ? "kapanış kartı, sahne metni" : "kapanış kartı"],
-    ["Telefon", v.iletisim.telefon, "telefon.deger", metinde.has("telefon") ? "kapanış kartı, sahne metni" : "kapanış kartı"],
-    ["Yetki belge no", v.iletisim.yetkiBelgeNo, "yetkiBelgeNo.deger", "kapanış kartı"],
-    ["Emlak ofisi", ilan.emlakOfisi, "emlakOfisi", "rozet, kapanış kartı, dış ses"],
-  ];
+  const kritik: [string, string, string, string][] = [];
+  if (v.iletisim.fiyat) kritik.push(["Fiyat", v.iletisim.fiyat, "fiyatTl.deger", metinde.has("fiyat") ? "kapanış kartı, sahne metni" : "kapanış kartı"]);
+  if (v.iletisim.telefon) kritik.push(["Telefon", v.iletisim.telefon, "telefon.deger", metinde.has("telefon") ? "kapanış kartı, sahne metni" : "kapanış kartı"]);
+  if (v.iletisim.yetkiBelgeNo) kritik.push(["Yetki belge no", v.iletisim.yetkiBelgeNo, "yetkiBelgeNo.deger", "kapanış kartı"]);
+  kritik.push(["Emlak ofisi", ilan.emlakOfisi, "emlakOfisi", "rozet, kapanış kartı, dış ses"]);
   if (v.iletisim.konum) kritik.push(["Konum", v.iletisim.konum, "konum", metinde.has("konum") ? "kapanış kartı, sahne metni" : "kapanış kartı"]);
   const sirketAdlari = { web: "Web", adres: "Adres", yetkili: "Yetkili", eposta: "E-posta" } as const;
   for (const [ad, deger] of Object.entries(ilan.sirketBilgileri ?? {}) as [keyof typeof sirketAdlari, string][]) {
@@ -66,6 +65,7 @@ export function uretimRaporu(v: UretimRaporuVerisi): string {
     if (y) kritik.push([AD[ad], y.ekran, y.kaynak, "sahne metni"]);
   }
   for (const [bilgi, deger, kaynak, nerede] of kritik) ekle(`| ${bilgi} | ${hucre(deger)} | \`${kaynak}\` | ${nerede} |`);
+  if (ilan.gizli.length) ekle("", `Videoda gizlenen bilgiler (emlakçının seçimi): ${ilan.gizli.map((a) => GIZLENEBILIR_ALAN_ADLARI[a]).join(", ")}.`);
 
   const hatalar = v.maddeler.filter((m) => m.seviye === "hata");
   const uyarilar = v.maddeler.filter((m) => m.seviye === "uyari");

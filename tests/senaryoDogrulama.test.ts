@@ -145,7 +145,7 @@ describe("senaryo doğrulaması", () => {
     const ilan = temurlar();
     ilan.konum.onayli = false;
     const h = hatalar(gecerliSenaryo(), baglam(ilan));
-    expect(h).toContain("Sahne 1 dış ses: {{konum}} onaylı olmayan bir bilgiye ait, kullanılamaz.");
+    expect(h).toContain("Sahne 1 dış ses: {{konum}} onaylı olmayan veya videoda gizlenen bir bilgiye ait, kullanılamaz.");
   });
 
   it("onaysız kira bilgisini her biçimde reddediyor", () => {
@@ -204,5 +204,37 @@ describe("senaryo doğrulaması", () => {
 
   it("yer tutucuları bir kelime sayıyor", () => {
     expect(kelimeSayisi("Fiyatı {{fiyat}}, {{konum}} konumunda.")).toBe(4);
+  });
+});
+
+describe("videoda gizlenen bilgiler", () => {
+  const gizli = (...alanlar: Ilan["gizli"]) => ({ ...temurlar(), gizli: alanlar });
+
+  it("gizli fiyatın yer tutucusunu reddediyor", () => {
+    const ilan = gizli("fiyat");
+    expect(yerTutucuTablosu(ilan).fiyat).toBeUndefined();
+    const { hatalar } = senaryoyuDogrula(gecerliSenaryo(), baglam(ilan));
+    expect(hatalar).toContain("Sahne 6 dış ses: {{fiyat}} onaylı olmayan veya videoda gizlenen bir bilgiye ait, kullanılamaz.");
+  });
+
+  it("gizli eşya ve oda bilgisini metinde yakalıyor", () => {
+    const { hatalar } = senaryoyuDogrula(gecerliSenaryo(), baglam(gizli("esyali", "odaSayisi")));
+    expect(hatalar.some((h) => h.includes('"eşyalı"'))).toBe(true);
+    expect(hatalar.some((h) => h.includes("oda sayısı videoda gizlendi"))).toBe(true);
+  });
+
+  it("gizli bilgileri yapay zekâya göndermiyor", () => {
+    const ilan = gizli("odaSayisi", "isitma", "kat", "ozellikler", "netM2");
+    const girdi = yzGirdisiOlustur(ilan, yerTutucuTablosu(ilan));
+    expect(girdi.odaSayisi).toBeUndefined();
+    expect(girdi.ozellikler).toEqual([]);
+    expect(girdi.bina.some((b) => b.startsWith("Isıtma") || b.includes("katında"))).toBe(false);
+    expect(girdi.kullanilabilirYerTutucular["{{netM2}}"]).toBeUndefined();
+  });
+
+  it("kalıp senaryo gizli bilgilerle de kurallardan geçiyor", () => {
+    const ilan = gizli("fiyat", "konum", "telefon", "odaSayisi", "netM2", "esyali", "krediyeUygun", "mutfak", "isitma");
+    const tablo = yerTutucuTablosu(ilan);
+    expect(senaryoyuDogrula(kalipSenaryo(yzGirdisiOlustur(ilan, tablo)), { ilan, tablo }).hatalar).toEqual([]);
   });
 });

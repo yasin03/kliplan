@@ -139,3 +139,37 @@ describe("ilan.json oluşturma", () => {
     expect(sonuc).toEqual({ basarili: false, hatalar: ["Fiyat: zorunlu alan eksik"] });
   });
 });
+
+describe("bölüm onayı ve videoda göster", () => {
+  const tekil = ["fiyatTl.onayli", "konum.onayli", "telefon.onayli", "yetkiBelgeNo.onayli"];
+  const bolumlu = (): FormAlanlari => {
+    const alanlar: FormAlanlari = { ...GECERLI, "onay.fiyatKonum": "on", "onay.iletisim": "on" };
+    for (const ad of tekil) delete alanlar[ad];
+    return alanlar;
+  };
+
+  it("bölüm kutusu bölümdeki bütün bilgileri onaylıyor", () => {
+    const sonuc = ilanFormunuDogrula(bolumlu());
+    expect(sonuc.basarili).toBe(true);
+    if (!sonuc.basarili) return;
+    expect([sonuc.veri.fiyatTl.onayli, sonuc.veri.konum.onayli, sonuc.veri.telefon.onayli, sonuc.veri.yetkiBelgeNo.onayli]).toEqual([true, true, true, true]);
+  });
+
+  it("kapatılan anahtarları gizli listesine yazıyor ve geri okuyor", () => {
+    const sonuc = ilanFormunuDogrula({ ...bolumlu(), "gizle.fiyat": "on", "gizle.ozellikler": "on", "gizle.bilinmeyen": "on" });
+    expect(sonuc.basarili && sonuc.veri.gizli).toEqual(["fiyat", "ozellikler"]);
+    if (!sonuc.basarili) return;
+    const form = veriyiFormaCevir(sonuc.veri);
+    expect([form["gizle.fiyat"], form["gizle.telefon"], form["onay.fiyatKonum"]]).toEqual(["on", "", "on"]);
+  });
+
+  it("gizlenen fiyat ve telefon onaysız olsa da üretime izin veriyor", () => {
+    const alanlar: FormAlanlari = { ...bolumlu(), "gizle.fiyat": "on", "gizle.telefon": "on" };
+    delete alanlar["onay.fiyatKonum"];
+    delete alanlar["onay.iletisim"];
+    alanlar["yetkiBelgeNo.onayli"] = "on";
+    const sonuc = ilanFormunuDogrula(alanlar);
+    if (!sonuc.basarili) throw new Error("form geçersiz");
+    expect(ilanJsonuOlustur(sonuc.veri, { ad: "Temurlar Grup" }, [{ dosyaAdi: "a.jpg", tur: "bina" }]).basarili).toBe(true);
+  });
+});

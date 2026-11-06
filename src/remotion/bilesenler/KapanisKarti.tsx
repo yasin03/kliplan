@@ -5,7 +5,7 @@ import { OfisRozeti } from "./OfisRozeti.js";
 
 type Props = { iletisim: Iletisim; ofis: VideoProps["ofis"] };
 
-/** Son sahnedeki fiyat, telefon, ofis ve yetki belge bilgisi. Değerler kod tarafından biçimlendirilmiş gelir. */
+/** Son sahnedeki fiyat, telefon, ofis ve yetki belge bilgisi. Değerler kod tarafından biçimlendirilmiş gelir; emlakçının gizlediği satır çizilmez. */
 export const KapanisKarti: React.FC<Props> = ({ iletisim, ofis }) => {
   const kare = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -27,25 +27,27 @@ export const KapanisKarti: React.FC<Props> = ({ iletisim, ofis }) => {
         boxShadow: "0 40px 100px rgba(0, 0, 0, 0.5)",
       }}
     >
-      <div style={{ color: vurgu, fontSize: 104, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1 }}>
-        {iletisim.fiyat}
-      </div>
+      {iletisim.fiyat ? (
+        <div style={{ color: vurgu, fontSize: 104, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1 }}>{iletisim.fiyat}</div>
+      ) : null}
       {iletisim.konum ? (
         <div style={{ color: tema.yaziSoluk, fontSize: 36, fontWeight: 500 }}>{iletisim.konum}</div>
       ) : null}
-      <div style={{ height: 2, background: tema.ayrac, margin: "10px 0" }} />
-      <div
-        style={{
-          color: tema.yazi,
-          fontSize: 76,
-          fontWeight: 800,
-          fontVariantNumeric: "tabular-nums",
-          letterSpacing: "-0.01em",
-          lineHeight: 1.05,
-        }}
-      >
-        {iletisim.telefon}
-      </div>
+      {iletisim.fiyat || iletisim.konum ? <div style={{ height: 2, background: tema.ayrac, margin: "10px 0" }} /> : null}
+      {iletisim.telefon ? (
+        <div
+          style={{
+            color: tema.yazi,
+            fontSize: 76,
+            fontWeight: 800,
+            fontVariantNumeric: "tabular-nums",
+            letterSpacing: "-0.01em",
+            lineHeight: 1.05,
+          }}
+        >
+          {iletisim.telefon}
+        </div>
+      ) : null}
       <OfisRozeti ad={ofis.ad} logo={ofis.logo} boyut={42} />
       {iletisim.ekSatirlar?.length ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -56,9 +58,9 @@ export const KapanisKarti: React.FC<Props> = ({ iletisim, ofis }) => {
           ))}
         </div>
       ) : null}
-      <div style={{ color: tema.yaziSoluk, fontSize: 30, fontWeight: 500 }}>
-        Yetki Belge No: {iletisim.yetkiBelgeNo}
-      </div>
+      {iletisim.yetkiBelgeNo ? (
+        <div style={{ color: tema.yaziSoluk, fontSize: 30, fontWeight: 500 }}>Yetki Belge No: {iletisim.yetkiBelgeNo}</div>
+      ) : null}
     </div>
   );
 };

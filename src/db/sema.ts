@@ -39,7 +39,8 @@ export const ofis = pgTable(
     yetkiliAdi: text(),
     yetkiliSoyadi: text(),
     kapanisAlanlari: jsonb().$type<KapanisAlani[]>().notNull().default([]),
-    logoAnahtari: text(),
+    /** İlanlarda varsayılan logo; boşsa yalnızca şirket adı. */
+    varsayilanLogoId: text().references((): AnyPgColumn => sirketLogosu.id, { onDelete: "set null" }),
     vurguRengi: text(),
     /** İlanlarda varsayılan tema (`TEMA_ADLARI`); ilan başına değiştirilebilir. */
     tema: text().notNull().default("koyu"),
@@ -63,6 +64,20 @@ export const sirketResmi = pgTable(
     anahtar: text().notNull(),
     genislik: integer().notNull(),
     yukseklik: integer().notNull(),
+    ...zamanDamgalari(),
+  },
+  (t) => [index().on(t.ofisId)],
+);
+
+/** Şirketin logoları; ilan başına biri seçilir, videonun üst köşesinde ve kapanış kartında görünür. */
+export const sirketLogosu = pgTable(
+  "sirket_logosu",
+  {
+    id: kimlik(),
+    ofisId: text()
+      .notNull()
+      .references((): AnyPgColumn => ofis.id, { onDelete: "cascade" }),
+    anahtar: text().notNull(),
     ...zamanDamgalari(),
   },
   (t) => [index().on(t.ofisId)],
@@ -206,6 +221,9 @@ export const ilan = pgTable(
     /** Kapanış arka planı; seçim kuralları müzikle aynı. */
     resimSecimi: text().$type<Secim>().notNull().default("ofis"),
     resimId: text().references(() => sirketResmi.id, { onDelete: "set null" }),
+    /** Logo; seçim kuralları müzikle aynı. `yok`: videoda logo gösterilmez. */
+    logoSecimi: text().$type<Secim>().notNull().default("ofis"),
+    logoId: text().references(() => sirketLogosu.id, { onDelete: "set null" }),
     ...zamanDamgalari(),
   },
   (t) => [index().on(t.ofisId, t.guncelleme)],
@@ -287,6 +305,8 @@ export const video = pgTable(
     maliyetUsd: real().notNull(),
     /** Sahte sağlayıcılarla (`--mock`) üretildi; müşteriye gönderilmez, onaylanamaz. */
     test: boolean().notNull().default(false),
+    /** Bu sürümde emlakçının gizlediği bilgiler (`GIZLENEBILIR_ALANLAR`); panelde sürümün yanında gösterilir. */
+    gizliAlanlar: jsonb().$type<string[]>().notNull().default([]),
     /** Onaylayan kullanıcının işaretlediği kontrol listesi maddeleri. */
     kontrolListesi: jsonb().$type<string[]>(),
     onaylayanId: text().references(() => user.id, { onDelete: "set null" }),

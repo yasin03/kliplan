@@ -1,16 +1,19 @@
 import type { Iletisim, Sahne, VideoProps } from "../remotion/tipler.js";
-import type { Ilan } from "../schema/ilan.js";
+import { gorunur, type Ilan } from "../schema/ilan.js";
 import { fiyatEkranMetni, konumEkranMetni } from "./bicim.js";
 import type { HazirlikSonucu } from "./fotografHazirlama.js";
 
 export class VideoVerisiHatasi extends Error {}
 
-/** Kapanış sahnesinin bilgileri. Onaysız fiyat, telefon veya yetki belgesiyle video üretilmez. */
+/** Kapanış sahnesinin bilgileri. Gizlenen bilgi karta girmez; gösterilen fiyat, telefon veya yetki belgesi onaysızsa video üretilmez. */
 export function iletisimBilgisi(ilan: Ilan): Iletisim {
+  const fiyat = gorunur(ilan, "fiyat");
+  const telefon = gorunur(ilan, "telefon");
+  const yetkiBelgeNo = gorunur(ilan, "yetkiBelgeNo");
   const eksikler = [
-    !ilan.fiyatTl.onayli && "fiyat",
-    !ilan.telefon.onayli && "telefon",
-    !ilan.yetkiBelgeNo.onayli && "yetki belge numarası",
+    fiyat && !ilan.fiyatTl.onayli && "fiyat",
+    telefon && !ilan.telefon.onayli && "telefon",
+    yetkiBelgeNo && !ilan.yetkiBelgeNo.onayli && "yetki belge numarası",
   ].filter(Boolean);
   if (eksikler.length > 0) {
     throw new VideoVerisiHatasi(
@@ -19,10 +22,10 @@ export function iletisimBilgisi(ilan: Ilan): Iletisim {
   }
   const ekSatirlar = SIRKET_SATIRLARI.map((ad) => ilan.sirketBilgileri?.[ad]).filter((d): d is string => Boolean(d));
   return {
-    fiyat: fiyatEkranMetni(ilan.fiyatTl.deger),
-    telefon: ilan.telefon.deger,
-    yetkiBelgeNo: ilan.yetkiBelgeNo.deger,
-    konum: ilan.konum.onayli ? konumEkranMetni(ilan.konum) : undefined,
+    fiyat: fiyat ? fiyatEkranMetni(ilan.fiyatTl.deger) : undefined,
+    telefon: telefon ? ilan.telefon.deger : undefined,
+    yetkiBelgeNo: yetkiBelgeNo ? ilan.yetkiBelgeNo.deger : undefined,
+    konum: ilan.konum.onayli && gorunur(ilan, "konum") ? konumEkranMetni(ilan.konum) : undefined,
     ...(ekSatirlar.length ? { ekSatirlar } : {}),
   };
 }

@@ -2,7 +2,7 @@ import type { z } from "zod";
 import { vurguHatasi } from "../pipeline/renk.js";
 import { VARSAYILAN_TEMA } from "../remotion/temalar.js";
 import { alanYolu, turkceHataHaritasi } from "../schema/hatalar.js";
-import { FOTOGRAF_TURLERI, type FotografTuru, type Ilan, ilanSemasi } from "../schema/ilan.js";
+import { FOTOGRAF_TURLERI, type FotografTuru, GIZLENEBILIR_ALANLAR, gorunur, type Ilan, ilanSemasi } from "../schema/ilan.js";
 
 /**
  * Web formu ile `ilan.json` arasındaki dönüşüm. Form düz alan adları kullanır (`fiyatTl.deger`, `konum.il`);
@@ -45,7 +45,21 @@ export const fotografTuruMu = (tur: string): tur is FotografTuru => (FOTOGRAF_TU
 /** Kira durumu seçenekleri; seçilen metin `kiraDurumu.aciklama` olarak saklanır. */
 export const KULLANIM_DURUMLARI = ["Boş", "Kiracılı", "Mülk sahibi oturuyor"] as const;
 
-/** Formun gönderdiği değerler: metin kutuları metin, işaretli kutular "on", işaretsizler hiç gelmez. */
+/**
+ * Bölüm sonundaki "doğruladım" kutuları ve kapsadıkları bilgiler. Kayıtta onay bilgi başına tutulur;
+ * eski alan adları (`fiyatTl.onayli` vb.) da okunur.
+ */
+export const ONAY_BOLUMLERI = {
+  fiyatKonum: ["fiyatTl.onayli", "konum.onayli"],
+  iletisim: ["telefon.onayli", "yetkiBelgeNo.onayli"],
+  kira: ["kiraDurumu.onayli"],
+} as const;
+type OnayAlani = (typeof ONAY_BOLUMLERI)[keyof typeof ONAY_BOLUMLERI][number];
+const ONAY_BOLUMU = Object.fromEntries(
+  Object.entries(ONAY_BOLUMLERI).flatMap(([bolum, alanlar]) => alanlar.map((a) => [a, `onay.${bolum}`])),
+) as Record<OnayAlani, string>;
+
+/** Formun gönderdiği değerler: metin kutuları metin, işaretli kutular "on", işaretsizler hiç gelmez. "Videoda göster" kapalıysa `gizle.<alan>` "on" gelir. */
 export type FormAlanlari = Record<string, string | undefined>;
 export type AlanHatalari = Record<string, string>;
 export type FormSonucu = { basarili: true; veri: IlanBilgileri } | { basarili: false; hatalar: AlanHatalari };
@@ -84,6 +98,9 @@ export function telefonuBicimlendir(deger: string | undefined): string | undefin
 
 const evetHayir = (deger: string | undefined) => (deger === "evet" ? true : deger === "hayir" ? false : undefined);
 const isaretli = (deger: string | undefined) => deger === "on" || deger === "true";
+/** Bilginin kendi kutusu veya bölümünün kutusu işaretliyse onaylı. */
+const onayli = (alanlar: FormAlanlari, ad: OnayAlani) => isaretli(alanlar[ad]) || isaretli(alanlar[ONAY_BOLUMU[ad]]);
+const gizliAlanlar = (alanlar: FormAlanlari) => GIZLENEBILIR_ALANLAR.filter((a) => isaretli(alanlar[`gizle.${a}`]));
 
 /** Özellikler satır satır veya virgülle yazılabilir; tekrarlar atılır. */
 function ozellikListesi(deger: string | undefined): string[] {
@@ -106,7 +123,7 @@ function kiraDurumu(alanlar: FormAlanlari) {
   return tanimlilar({
     aciklama,
     kiraTl: kira,
-    onayli: isaretli(alanlar["kiraDurumu.onayli"]),
+    onayli: onayli(alanlar, "kiraDurumu.onayli"),
     not: metin(alanlar["kiraDurumu.not"]),
   });
 }
@@ -115,14 +132,14 @@ function kiraDurumu(alanlar: FormAlanlari) {
 export function formuVeriyeCevir(alanlar: FormAlanlari): Record<string, unknown> {
   return tanimlilar({
     ilanNo: metin(alanlar.ilanNo)?.replace(/\s/g, ""),
-    yetkiBelgeNo: { deger: metin(alanlar["yetkiBelgeNo.deger"])?.replace(/\s/g, ""), onayli: isaretli(alanlar["yetkiBelgeNo.onayli"]) },
-    telefon: { deger: telefonuBicimlendir(alanlar["telefon.deger"]), onayli: isaretli(alanlar["telefon.onayli"]) },
-    fiyatTl: { deger: tamSayi(alanlar["fiyatTl.deger"]), onayli: isaretli(alanlar["fiyatTl.onayli"]) },
+    yetkiBelgeNo: { deger: metin(alanlar["yetkiBelgeNo.deger"])?.replace(/\s/g, ""), onayli: onayli(alanlar, "yetkiBelgeNo.onayli") },
+    telefon: { deger: telefonuBicimlendir(alanlar["telefon.deger"]), onayli: onayli(alanlar, "telefon.onayli") },
+    fiyatTl: { deger: tamSayi(alanlar["fiyatTl.deger"]), onayli: onayli(alanlar, "fiyatTl.onayli") },
     konum: {
       il: metin(alanlar["konum.il"]),
       ilce: metin(alanlar["konum.ilce"]),
       mahalle: metin(alanlar["konum.mahalle"]),
-      onayli: isaretli(alanlar["konum.onayli"]),
+      onayli: onayli(alanlar, "konum.onayli"),
     },
     odaSayisi: metin(alanlar.odaSayisi)?.replace(/\s/g, ""),
     brutM2: ondalik(alanlar.brutM2),
@@ -137,6 +154,7 @@ export function formuVeriyeCevir(alanlar: FormAlanlari): Record<string, unknown>
     tapu: metin(alanlar.tapu),
     ozellikler: ozellikListesi(alanlar.ozellikler),
     kiraDurumu: kiraDurumu(alanlar),
+    gizli: gizliAlanlar(alanlar),
   });
 }
 
@@ -158,20 +176,32 @@ export function ilanFormunuDogrula(alanlar: FormAlanlari): FormSonucu {
 const evetHayirMetni = (deger: unknown) => (deger === true ? "evet" : deger === false ? "hayir" : "");
 const yaz = (deger: unknown) => (deger === undefined || deger === null ? "" : String(deger));
 
-/** Kayıtlı veriyi düzenleme formunun başlangıç değerlerine çevirir (`formuVeriyeCevir`'in tersi). */
+/**
+ * Kayıtlı veriyi düzenleme formunun başlangıç değerlerine çevirir (`formuVeriyeCevir`'in tersi).
+ * Bölüm kutusu, bölümdeki bütün bilgiler onaylıysa işaretli başlar.
+ */
 export function veriyiFormaCevir(veri: Partial<IlanBilgileri>): FormAlanlari {
+  const onaylar: Record<OnayAlani, boolean | undefined> = {
+    "fiyatTl.onayli": veri.fiyatTl?.onayli,
+    "konum.onayli": veri.konum?.onayli,
+    "telefon.onayli": veri.telefon?.onayli,
+    "yetkiBelgeNo.onayli": veri.yetkiBelgeNo?.onayli,
+    "kiraDurumu.onayli": veri.kiraDurumu?.onayli,
+  };
+  const bolumler = Object.fromEntries(
+    Object.entries(ONAY_BOLUMLERI).map(([bolum, alanlar]) => [`onay.${bolum}`, alanlar.every((a) => onaylar[a]) ? "on" : ""]),
+  );
+  const gizli = new Set(veri.gizli ?? []);
   return {
+    ...bolumler,
+    ...Object.fromEntries(GIZLENEBILIR_ALANLAR.map((a) => [`gizle.${a}`, gizli.has(a) ? "on" : ""])),
     ilanNo: yaz(veri.ilanNo),
     "yetkiBelgeNo.deger": yaz(veri.yetkiBelgeNo?.deger),
-    "yetkiBelgeNo.onayli": veri.yetkiBelgeNo?.onayli ? "on" : "",
     "telefon.deger": yaz(veri.telefon?.deger),
-    "telefon.onayli": veri.telefon?.onayli ? "on" : "",
     "fiyatTl.deger": typeof veri.fiyatTl?.deger === "number" ? veri.fiyatTl.deger.toLocaleString("tr-TR") : "",
-    "fiyatTl.onayli": veri.fiyatTl?.onayli ? "on" : "",
     "konum.il": yaz(veri.konum?.il),
     "konum.ilce": yaz(veri.konum?.ilce),
     "konum.mahalle": yaz(veri.konum?.mahalle),
-    "konum.onayli": veri.konum?.onayli ? "on" : "",
     odaSayisi: yaz(veri.odaSayisi),
     brutM2: yaz(veri.brutM2).replace(".", ","),
     netM2: yaz(veri.netM2).replace(".", ","),
@@ -186,7 +216,6 @@ export function veriyiFormaCevir(veri: Partial<IlanBilgileri>): FormAlanlari {
     ozellikler: (veri.ozellikler ?? []).join("\n"),
     "kiraDurumu.aciklama": yaz(veri.kiraDurumu?.aciklama),
     "kiraDurumu.kiraTl": yaz(veri.kiraDurumu?.kiraTl),
-    "kiraDurumu.onayli": veri.kiraDurumu?.onayli ? "on" : "",
     "kiraDurumu.not": yaz(veri.kiraDurumu?.not),
   };
 }
@@ -212,13 +241,19 @@ export function ilanJsonuOlustur(
     // Okunmayan vurgu rengiyle video üretilmez (CLI'da da doğrulama hatası); para harcamadan önce burada söylenir.
     const vurgu = vurguHatasi(sonuc.data.vurguRengi, sonuc.data.tema ?? VARSAYILAN_TEMA);
     if (vurgu) return { basarili: false, hatalar: [`Vurgu rengi: ${vurgu} Renk şirket ayarlarında, tema ilanın görünüm bölümünde değiştirilir.`] };
-    // Kapanış kartı bu üç bilgiyle kurulur (`iletisimBilgisi`); onaysızsa video üretilemez.
-    const { fiyatTl, telefon, yetkiBelgeNo } = sonuc.data;
-    const onaysiz = [!fiyatTl.onayli && "fiyat", !telefon.onayli && "telefon", !yetkiBelgeNo.onayli && "yetki belge numarası"].filter(Boolean);
+    // Kapanış kartı bu üç bilgiyle kurulur (`iletisimBilgisi`); videoda gösterilen biri onaysızsa video üretilemez.
+    const i = sonuc.data;
+    const onaysiz = [
+      gorunur(i, "fiyat") && !i.fiyatTl.onayli && "fiyat",
+      gorunur(i, "telefon") && !i.telefon.onayli && "telefon",
+      gorunur(i, "yetkiBelgeNo") && !i.yetkiBelgeNo.onayli && "yetki belge numarası",
+    ].filter(Boolean);
     if (onaysiz.length) {
       return {
         basarili: false,
-        hatalar: [`Videonun kapanışında gösterilen ${onaysiz.join(", ")} doğrulanmalı: Bilgiler'de "Bu bilgiyi doğruladım" kutusunu işaretleyin.`],
+        hatalar: [
+          `Videonun kapanışında gösterilen ${onaysiz.join(", ")} doğrulanmalı: Bilgiler'de bölümün sonundaki "Bu bölümdeki bilgileri doğruladım" kutusunu işaretleyin veya bilgiyi videoda gizleyin.`,
+        ],
       };
     }
     return { basarili: true, ilan: sonuc.data };

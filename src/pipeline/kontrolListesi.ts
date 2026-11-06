@@ -14,12 +14,12 @@ export type KontrolMaddesi = {
  * onay ekranı aynı listeyi kullanır; panelde hepsi işaretlenmeden video onaylanamaz.
  */
 export function kontrolMaddeleri(ilan: Ilan, iletisim: Iletisim): KontrolMaddesi[] {
+  const kapanis = [iletisim.fiyat, iletisim.telefon, iletisim.yetkiBelgeNo && `Yetki Belge No: ${iletisim.yetkiBelgeNo}`, ...(iletisim.ekSatirlar ?? [])].filter(Boolean);
+  if (!kapanis.length) kapanis.push(ilan.emlakOfisi);
   const maddeler: KontrolMaddesi[] = [
     {
       kod: "iletisim",
-      metin: iletisim.ekSatirlar?.length
-        ? `Fiyat, telefon, yetki belge numarası ve kapanıştaki şirket bilgileri doğru (${[iletisim.fiyat, iletisim.telefon, iletisim.yetkiBelgeNo, ...iletisim.ekSatirlar].join(", ")}).`
-        : `Fiyat, telefon ve yetki belge numarası doğru (${iletisim.fiyat}, ${iletisim.telefon}, ${iletisim.yetkiBelgeNo}).`,
+      metin: `Kapanış kartındaki bilgiler doğru (${kapanis.join(", ")}).`,
     },
     { kod: "ifade", metin: "Dış seste ilanda olmayan veya abartılı bir ifade yok." },
     { kod: "okunus", metin: "Ofis, mahalle ve marka adları doğru okunuyor.", cliNotu: "yanlışsa `telaffuz.json`" },

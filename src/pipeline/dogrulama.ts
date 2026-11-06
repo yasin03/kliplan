@@ -4,7 +4,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { VARSAYILAN_TEMA } from "../remotion/temalar.js";
 import { alanYolu, turkceHataHaritasi } from "../schema/hatalar.js";
-import { ilanSemasi, type Ilan } from "../schema/ilan.js";
+import { type GizlenebilirAlan, gorunur, ilanSemasi, type Ilan } from "../schema/ilan.js";
 import { KontrolRaporu } from "./kontrolRaporu.js";
 import { vurguHatasi } from "./renk.js";
 
@@ -43,18 +43,19 @@ export function ilanVerisiniDogrula(veri: unknown, rapor: KontrolRaporu): Ilan |
 
 /** Onaysız, eksik veya kendi içinde çelişkili bilgileri uyarı, okunamayacak vurgu rengini hata olarak rapora ekler. */
 export function tutarlilikKontrolu(ilan: Ilan, rapor: KontrolRaporu): void {
-  const onaysizlar: [string, boolean][] = [
-    ["Yetki belge numarası", ilan.yetkiBelgeNo.onayli],
-    ["Telefon", ilan.telefon.onayli],
-    ["Fiyat", ilan.fiyatTl.onayli],
-    ["Konum", ilan.konum.onayli],
+  // Videoda gizlenen bilginin onayı aranmaz.
+  const onaysizlar: [string, boolean, GizlenebilirAlan][] = [
+    ["Yetki belge numarası", ilan.yetkiBelgeNo.onayli, "yetkiBelgeNo"],
+    ["Telefon", ilan.telefon.onayli, "telefon"],
+    ["Fiyat", ilan.fiyatTl.onayli, "fiyat"],
+    ["Konum", ilan.konum.onayli, "konum"],
   ];
-  for (const [alan, onayli] of onaysizlar) {
-    if (!onayli) rapor.uyari(alan, "Onaylı değil. Videoda kullanılmayacak, emlakçıyla doğrulayın.");
+  for (const [alan, onayli, ad] of onaysizlar) {
+    if (!onayli && gorunur(ilan, ad)) rapor.uyari(alan, "Onaylı değil. Videoda kullanılmayacak, emlakçıyla doğrulayın.");
   }
 
   const kira = ilan.kiraDurumu;
-  if (kira && !kira.onayli) {
+  if (kira && !kira.onayli && gorunur(ilan, "kiraDurumu")) {
     const tutar = kira.kiraTl === undefined ? "" : ` (${kira.kiraTl.toLocaleString("tr-TR")} TL)`;
     const not = kira.not ? ` Not: ${kira.not}` : "";
     rapor.uyari("Kira durumu", `"${kira.aciklama}"${tutar} onaylı değil, videoda kullanılmayacak.${not}`);

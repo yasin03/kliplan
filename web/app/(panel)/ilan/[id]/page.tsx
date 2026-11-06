@@ -154,6 +154,7 @@ export default async function IlanSayfasi({ params }: PageProps<"/ilan/[id]">) {
         tema={temaAdiMi(ilan.tema) ? ilan.tema : null}
         muzik={secimDegeri(ilan.muzikSecimi, ilan.muzikId)}
         resim={secimDegeri(ilan.resimSecimi, ilan.resimId)}
+        logo={secimDegeri(ilan.logoSecimi, ilan.logoId)}
         secenekler={secenekler}
         okunmayanTemalar={okunmayanTemalar}
         kilitli={uretiliyor}

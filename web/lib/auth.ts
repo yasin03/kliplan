@@ -16,7 +16,9 @@ const kuresel = globalThis as unknown as { kliplanHavuz?: Veritabani["$client"];
 // Veritabanı bu dosyanın dışına verilmez; ofise bağlı veriye yalnızca `depoAl` ile erişilir.
 const db = kuresel.kliplanHavuz ? havuzdanVeritabani(kuresel.kliplanHavuz) : veritabaniOlustur();
 kuresel.kliplanHavuz = db.$client;
-export const depolama = (kuresel.kliplanDepolama ??= depolamaOlustur(process.env.KLIPLAN_KOK ?? process.cwd()));
+// Geliştirmede her yüklemede yeniden kurulur: önbellekteki nesne eski kodu (ör. anahtar kuralları) sunucu yeniden başlayana kadar tutardı.
+const yeniDepolama = () => depolamaOlustur(process.env.KLIPLAN_KOK ?? process.cwd());
+export const depolama = process.env.NODE_ENV === "development" ? yeniDepolama() : (kuresel.kliplanDepolama ??= yeniDepolama());
 
 // nextCookies, sunucu eylemlerinde çerezleri ayarlar; listede son olmalı.
 export const auth = kimlikOlustur(db, [nextCookies()]);

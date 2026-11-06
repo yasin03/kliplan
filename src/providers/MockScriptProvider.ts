@@ -82,17 +82,20 @@ export function kalipSenaryo(girdi: YzGirdisi): YzSenaryo {
   };
   const sifir = girdi.bina.some((b) => b.startsWith("Bina sıfır"));
 
+  // Oda sayısı gizlendiyse verilmez; "daire" tek başına kullanılır.
+  const daire = girdi.odaSayisi ? `${girdi.odaSayisi} daire` : "bir daire";
   const ilk = {
     fotograf: sec("bina", "dis_mekan"),
-    baslik: sifir ? "Sıfır binada daire" : `${girdi.odaSayisi.charAt(0).toLocaleUpperCase("tr-TR")}${girdi.odaSayisi.slice(1)} daire`,
-    disSes: `${yerTutucu("konum") ? "{{konum}} konumunda, " : ""}${sifir ? "yeni yapılmış bir binada " : ""}${girdi.odaSayisi} daire.`,
-    ekranMetni: yerTutucu("konum") ? "{{konum}}" : ekranMetni([girdi.odaSayisi], "Daire"),
+    baslik: sifir ? "Sıfır binada daire" : `${daire.charAt(0).toLocaleUpperCase("tr-TR")}${daire.slice(1)}`,
+    disSes: `${yerTutucu("konum") ? "{{konum}} konumunda, " : ""}${sifir ? "yeni yapılmış bir binada " : ""}${daire}.`,
+    ekranMetni: yerTutucu("konum") ? "{{konum}}" : ekranMetni([girdi.odaSayisi ?? ""], "Daire"),
   };
+  const esyali = bilgi("Daire eşyalı");
   const ic = {
     fotograf: sec("salon"),
     baslik: "Salon",
-    disSes: `${bilgi("Daire eşyalı") ? "Daire eşyalı olarak sunuluyor. " : ""}Net kullanım alanı {{netM2}}.`,
-    ekranMetni: `${bilgi("Daire eşyalı") ? "Eşyalı · " : ""}Net {{netM2}}`,
+    disSes: [esyali ? "Daire eşyalı olarak sunuluyor." : "", yerTutucu("netM2") ? "Net kullanım alanı {{netM2}}." : "Salonu yakından görelim."].filter(Boolean).join(" "),
+    ekranMetni: [esyali ? "Eşyalı" : "", yerTutucu("netM2") ? "Net {{netM2}}" : "Yaşam alanı"].filter(Boolean).join(" · "),
   };
   const ara: YzSenaryo["sahneler"] = [];
   const mutfak = deger("Mutfak:");

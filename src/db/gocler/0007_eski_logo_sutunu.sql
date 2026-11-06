@@ -1,0 +1,1 @@
+ALTER TABLE "ofis" DROP COLUMN "logo_anahtari";

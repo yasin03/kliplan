@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { EN_FAZLA_SIRKET_RESMI } from "@cekirdek/veri/depo.js";
+import { EN_FAZLA_SIRKET_LOGOSU, EN_FAZLA_SIRKET_RESMI } from "@cekirdek/veri/depo.js";
 import { EN_BUYUK_DOSYA_MB } from "@cekirdek/veri/fotografIsleme.js";
 import { ofisTemasi } from "@cekirdek/veri/gorunum.js";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,7 +43,7 @@ export default async function AyarlarSayfasi({ searchParams }: PageProps<"/ayarl
   }
 
   const ofis = await bulunamazsa404(depo.ayarlanacakOfis(istenen));
-  const [secenekler, logoAdresi] = await Promise.all([gorunumSecenekleri(depo, ofis), ofis.logoAnahtari ? depo.dosyaBaglantisi(ofis.logoAnahtari) : null]);
+  const secenekler = await gorunumSecenekleri(depo, ofis);
   const ofisId = yetki.admin ? ofis.id : null;
 
   return (
@@ -52,7 +52,7 @@ export default async function AyarlarSayfasi({ searchParams }: PageProps<"/ayarl
         <h1 className="text-xl font-semibold">Şirket ayarları</h1>
         <p className="text-sm text-muted-foreground">{ofis.ad} · Ayarlar yalnızca bundan sonra üretilen videolara uygulanır; üretilmiş videolar değişmez.</p>
       </div>
-      <LogoBolumu ofisId={ofisId} adres={logoAdresi} />
+      <LogoBolumu ofisId={ofisId} logolar={secenekler.logolar} enFazla={EN_FAZLA_SIRKET_LOGOSU} />
       <ResimBolumu ofisId={ofisId} resimler={secenekler.resimler} enFazla={EN_FAZLA_SIRKET_RESMI} enBuyukMb={EN_BUYUK_DOSYA_MB} />
       <AyarlarFormu
         ofisId={ofisId}
@@ -68,6 +68,7 @@ export default async function AyarlarSayfasi({ searchParams }: PageProps<"/ayarl
           yetkiliSoyadi: ofis.yetkiliSoyadi ?? "",
           ...Object.fromEntries(ofis.kapanisAlanlari.map((k) => [`kapanis.${k}`, "on"])),
           varsayilanResimId: ofis.varsayilanResimId ?? "",
+          varsayilanLogoId: ofis.varsayilanLogoId ?? "",
           telefon: ofis.telefon ?? "",
           yetkiBelgeNo: ofis.yetkiBelgeNo ?? "",
           tema: ofisTemasi(ofis),
@@ -77,6 +78,7 @@ export default async function AyarlarSayfasi({ searchParams }: PageProps<"/ayarl
         }}
         muzikler={secenekler.muzikler}
         resimler={secenekler.resimler}
+        logolar={secenekler.logolar}
       />
     </div>
   );

@@ -46,10 +46,10 @@ export async function resimSil(resimId: string): Promise<{ hata: string | null }
   return { hata: null };
 }
 
-export async function logoSil(ofisId: string | null): Promise<{ hata: string | null }> {
+export async function logoSil(logoId: string): Promise<{ hata: string | null }> {
   const { depo } = await girisGerekli();
   try {
-    await depo.logoSil(ofisId ?? undefined);
+    await depo.logoSil(logoId);
   } catch (hata) {
     const mesaj = kullaniciMesaji(hata);
     if (!mesaj) throw hata;

@@ -23,10 +23,10 @@ export type HazirFotograf = {
 };
 
 export type Iletisim = {
-  /** Ekranda gösterilecek, kod tarafından biçimlendirilmiş değerler. */
-  fiyat: string;
-  telefon: string;
-  yetkiBelgeNo: string;
+  /** Ekranda gösterilecek, kod tarafından biçimlendirilmiş değerler. Emlakçı videoda gizlediyse verilmez. */
+  fiyat?: string | undefined;
+  telefon?: string | undefined;
+  yetkiBelgeNo?: string | undefined;
   konum?: string | undefined;
   /** Şirketin kapanışta göstermeyi seçtiği bilgiler (web, adres, yetkili, e-posta), ekrandaki haliyle. */
   ekSatirlar?: string[] | undefined;

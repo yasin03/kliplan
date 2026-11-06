@@ -105,7 +105,7 @@ describe.skipIf(!testDb)("ofis ayarları, logo ve müzik (veritabanı)", () => {
     expect((await depo(a).ayarlanacakOfis()).varsayilanMuzikId).toBeNull();
   });
 
-  it("ofis ayarlarını üye yalnızca kendi ofisinde, admin seçtiği ofiste değiştiriyor; logo değişince eskisi siliniyor", async () => {
+  it("ofis ayarlarını üye yalnızca kendi ofisinde, admin seçtiği ofiste değiştiriyor; logolar eklenip siliniyor", async () => {
     await expect(depo(a).ayarlanacakOfis(b.ofisId!)).rejects.toBeInstanceOf(ErisimHatasi);
     await expect(depo(a).ofisAyarlariniKaydet(ayarlar, b.ofisId!)).rejects.toBeInstanceOf(ErisimHatasi);
     await expect(depo(admin).ofisAyarlariniKaydet(ayarlar)).rejects.toBeInstanceOf(ErisimHatasi);
@@ -113,13 +113,17 @@ describe.skipIf(!testDb)("ofis ayarları, logo ve müzik (veritabanı)", () => {
     expect(await depo(b).ayarlanacakOfis()).toMatchObject({ tema: "acik", vurguRengi: "#1E3A8A" });
 
     const logo = await logoyuIsle(await sharp({ create: { width: 400, height: 200, channels: 3, background: "#123456" } }).png().toBuffer());
-    await depo(a).logoKaydet(logo);
-    const ilk = (await depo(a).ayarlanacakOfis()).logoAnahtari!;
-    expect(ilk.startsWith(`ofis/${a.ofisId}/logo/`)).toBe(true);
-    await depo(a).logoKaydet({ ...logo, dosyaAdi: "yeni0001.png" });
-    await expect(depolama.oku(ilk)).rejects.toThrow();
-    await depo(a).logoSil();
-    expect((await depo(a).ayarlanacakOfis()).logoAnahtari).toBeNull();
+    const ilk = await depo(a).logoEkle(logo);
+    expect(ilk.anahtar.startsWith(`ofis/${a.ofisId}/logo/`)).toBe(true);
+    // İlk logo varsayılan olur; ikincisi varsayılanı değiştirmez.
+    const ikinci = await depo(a).logoEkle({ ...logo, dosyaAdi: "yeni0001.png" });
+    expect((await depo(a).ayarlanacakOfis()).varsayilanLogoId).toBe(ilk.id);
+    expect((await depo(a).logolar()).map((l) => l.id)).toEqual([ilk.id, ikinci.id]);
+    await expect(depo(b).logoSil(ilk.id)).rejects.toBeInstanceOf(BulunamadiHatasi);
+    await expect(depo(b).ofisAyarlariniKaydet({ varsayilanLogoId: ikinci.id })).rejects.toBeInstanceOf(DuzenlemeHatasi);
+    await depo(a).logoSil(ilk.id);
+    await expect(depolama.oku(ilk.anahtar)).rejects.toThrow();
+    expect((await depo(a).ayarlanacakOfis()).varsayilanLogoId).toBeNull();
   });
 
   it("ilanın görünümü değişince ilan taslağa dönüyor, senaryo korunuyor; değişmezse dokunulmuyor", async () => {
@@ -227,7 +231,7 @@ describe.skipIf(!testDb)("ofis ayarları, logo ve müzik (veritabanı)", () => {
       const b1 = await baglam();
       const m = await depo(a).muzikEkle(yeniMuzik(false));
       await depo(a).ofisAyarlariniKaydet({ ...ayarlar, vurguRengi: "#1E3A8A", tema: "acik", varsayilanMuzikId: m.id });
-      await depo(a).logoKaydet(await logoyuIsle(await sharp({ create: { width: 400, height: 200, channels: 3, background: "#123456" } }).png().toBuffer()));
+      await depo(a).logoEkle(await logoyuIsle(await sharp({ create: { width: 400, height: 200, channels: 3, background: "#123456" } }).png().toBuffer()));
       const kayit = await hazirIlan();
 
       await isiCalistir(b1, (await depo(a).uretimBaslat(kayit.id, "senaryo")).id);
@@ -263,6 +267,31 @@ describe.skipIf(!testDb)("ofis ayarları, logo ve müzik (veritabanı)", () => {
       await depo(a).ilanGorunumunuKaydet(kayit.id, { tema: null, muzikSecimi: "ofis", muzikId: null, resimSecimi: "yok", resimId: null });
       await isiCalistir(b1, (await depo(a).uretimBaslat(kayit.id, "video")).id);
       expect(alinanProps?.kapanisFotografi).toBeNull();
+    });
+
+    it("ilanda seçilen logo kullanılıyor, logo ve fiyat gizlenince videoya girmiyor; sürüm gizlenenleri saklıyor", async () => {
+      const b1 = await baglam();
+      const logo = await logoyuIsle(await sharp({ create: { width: 400, height: 200, channels: 3, background: "#123456" } }).png().toBuffer());
+      await depo(a).logoEkle(logo);
+      const ikinci = await depo(a).logoEkle({ ...logo, dosyaAdi: "ikinci01.png", icerik: await sharp({ create: { width: 300, height: 100, channels: 3, background: "#654321" } }).png().toBuffer() });
+      const kayit = await hazirIlan();
+      await depo(a).ilanGorunumunuKaydet(kayit.id, { tema: null, muzikSecimi: "yok", muzikId: null, logoSecimi: "secili", logoId: ikinci.id });
+      await isiCalistir(b1, (await depo(a).uretimBaslat(kayit.id, "senaryo")).id);
+      await isiCalistir(b1, (await depo(a).uretimBaslat(kayit.id, "video")).id);
+      expect((await sharp(path.join(publicKlasoru, "ilan/logo.png")).metadata()).width).toBe(300);
+
+      // Fiyat gizlenince senaryo yeniden üretilir (eski senaryo {{fiyat}} içeriyor).
+      const veri = (await depo(a).ilan(kayit.id)).veri;
+      await depo(a).ilanBilgileriniKaydet(kayit.id, { ...veri, gizli: ["fiyat"] });
+      await depo(a).ilanGorunumunuKaydet(kayit.id, { tema: null, muzikSecimi: "yok", muzikId: null, logoSecimi: "yok", logoId: null });
+      await isiCalistir(b1, (await depo(a).uretimBaslat(kayit.id, "senaryo")).id);
+      await isiCalistir(b1, (await depo(a).uretimBaslat(kayit.id, "video")).id);
+      expect(alinanProps?.ofis.logo).toBeNull();
+      expect(alinanProps?.iletisim.fiyat).toBeUndefined();
+      expect(JSON.stringify(alinanProps?.sahneler)).not.toContain("4.500.000");
+      const [son, ilk] = await depo(a).videolar(kayit.id);
+      expect([son?.gizliAlanlar, ilk?.gizliAlanlar]).toEqual([["fiyat"], []]);
+      expect((await depolama.oku(son!.raporAnahtari)).toString()).toContain("Videoda gizlenen bilgiler (emlakçının seçimi): Fiyat.");
     });
 
     it("ilanda müziksiz seçilince müzik eklenmiyor; vurgu rengi seçilen temada okunmuyorsa üretim 1. adımda duruyor", async () => {

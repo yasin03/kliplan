@@ -1,10 +1,10 @@
 import { and, asc, desc, eq, isNull, max, ne, or } from "drizzle-orm";
 import type { Veritabani } from "../db/baglanti.js";
-import { fotograf, ilan, type KayitliHata, muzik, ofis, type Secim, sirketResmi, uretimIsi, user, video } from "../db/sema.js";
+import { fotograf, ilan, type KayitliHata, muzik, ofis, type Secim, sirketLogosu, sirketResmi, uretimIsi, user, video } from "../db/sema.js";
 import { anahtariDogrula, type Depolama, ilanOneki, KUTUPHANE_ONEKI, ofisOneki } from "../depolama/Depolama.js";
 import type { TemaAdi } from "../remotion/temalar.js";
 import { EN_FAZLA_FOTOGRAF, type IslenmisFotograf } from "./fotografIsleme.js";
-import { ilanMuzikId, ilanResimId, MUZIK_BEYANI, muzikKullanilabilir, type OfisAyarlari } from "./gorunum.js";
+import { ilanLogoId, ilanMuzikId, ilanResimId, MUZIK_BEYANI, muzikKullanilabilir, type OfisAyarlari } from "./gorunum.js";
 import type { IslenmisLogo, IslenmisMuzik } from "./gorunumIsleme.js";
 import { BulunamadiHatasi, dosyayaErisebilirMi, ErisimHatasi, hedefOfis, ofisKosulu, type Yetki } from "./yetki.js";
 
@@ -29,9 +29,13 @@ export type IlanGorunumSecimi = {
   /** Verilmezse mevcut kapanış resmi seçimi korunur. */
   resimSecimi?: Secim | undefined;
   resimId?: string | null | undefined;
+  /** Verilmezse mevcut logo seçimi korunur. */
+  logoSecimi?: Secim | undefined;
+  logoId?: string | null | undefined;
 };
 
 export const EN_FAZLA_SIRKET_RESMI = 12;
+export const EN_FAZLA_SIRKET_LOGOSU = 6;
 
 /** Anahtar sırasından bağımsız JSON; PostgreSQL `jsonb` anahtarları kendi sırasına dizer. */
 const siraliJson = (deger: unknown): string =>
@@ -94,22 +98,54 @@ export function depoOlustur(db: Veritabani, yetki: Yetki, depolama: Depolama) {
     return kayit;
   }
 
-  /** Seçilen müzik ve resim şirkete ait mi; "secili" değilse kimlik boşaltılır. Resim seçimi verilmezse `mevcut` korunur. */
-  async function gorunumSeciminiDogrula(secim: IlanGorunumSecimi, ofisId: string, mevcut?: { resimSecimi: Secim; resimId: string | null }) {
+  /** Şirketin kendi logosu mu? Değilse kullanıcı hatası. */
+  async function secilebilirLogo(id: string, ofisId: string) {
+    const kayit = await db.query.sirketLogosu.findFirst({ where: and(eq(sirketLogosu.id, id), eq(sirketLogosu.ofisId, ofisId)) });
+    if (!kayit) throw new DuzenlemeHatasi("Seçilen logo bulunamadı; silinmiş olabilir. Sayfayı yenileyin.");
+    return kayit;
+  }
+
+  /**
+   * Seçim verilmediyse mevcut korunur; mevcut seçili kayıt silinmişse (kimlik boşaldı) şirket varsayılanına geçilir.
+   * "secili" değilse kimlik boşaltılır.
+   */
+  function korunanSecim(verilen: Secim | undefined, verilenId: string | null | undefined, mevcutSecim: Secim | undefined, mevcutId: string | null | undefined) {
+    const korunan = mevcutSecim === "secili" && !mevcutId ? "ofis" : mevcutSecim;
+    const secim = verilen ?? korunan ?? "ofis";
+    const id = secim === "secili" ? (verilen ? (verilenId ?? null) : (mevcutId ?? null)) : null;
+    return { secim, id };
+  }
+
+  /** Seçilen müzik, resim ve logo şirkete ait mi. Resim veya logo seçimi verilmezse `mevcut` korunur. */
+  async function gorunumSeciminiDogrula(
+    secim: IlanGorunumSecimi,
+    ofisId: string,
+    mevcut?: { resimSecimi: Secim; resimId: string | null; logoSecimi: Secim; logoId: string | null },
+  ) {
     const muzikId = secim.muzikSecimi === "secili" ? secim.muzikId : null;
     if (secim.muzikSecimi === "secili") {
       if (!muzikId) throw new DuzenlemeHatasi("Bir müzik seçin.");
       await secilebilirMuzik(muzikId, ofisId);
     }
-    // Seçim verilmediyse mevcut korunur; mevcut seçili resim silinmişse (kimlik boşaldı) şirket varsayılanına geçilir.
-    const korunan = mevcut?.resimSecimi === "secili" && !mevcut.resimId ? "ofis" : mevcut?.resimSecimi;
-    const resimSecimi = secim.resimSecimi ?? korunan ?? "ofis";
-    const resimId = resimSecimi === "secili" ? (secim.resimSecimi ? (secim.resimId ?? null) : (mevcut?.resimId ?? null)) : null;
-    if (resimSecimi === "secili") {
-      if (!resimId) throw new DuzenlemeHatasi("Bir şirket resmi seçin.");
-      await secilebilirResim(resimId, ofisId);
+    const resim = korunanSecim(secim.resimSecimi, secim.resimId, mevcut?.resimSecimi, mevcut?.resimId);
+    if (resim.secim === "secili") {
+      if (!resim.id) throw new DuzenlemeHatasi("Bir şirket resmi seçin.");
+      await secilebilirResim(resim.id, ofisId);
     }
-    return { tema: secim.tema, muzikSecimi: secim.muzikSecimi, muzikId, resimSecimi, resimId };
+    const logo = korunanSecim(secim.logoSecimi, secim.logoId, mevcut?.logoSecimi, mevcut?.logoId);
+    if (logo.secim === "secili") {
+      if (!logo.id) throw new DuzenlemeHatasi("Bir logo seçin.");
+      await secilebilirLogo(logo.id, ofisId);
+    }
+    return {
+      tema: secim.tema,
+      muzikSecimi: secim.muzikSecimi,
+      muzikId,
+      resimSecimi: resim.secim,
+      resimId: resim.id,
+      logoSecimi: logo.secim,
+      logoId: logo.id,
+    };
   }
 
   /** Bilgi veya fotoğraf değişecekse çağrılır. Üretim sürerken değişikliğe izin verilmez. */
@@ -146,6 +182,7 @@ export function depoOlustur(db: Veritabani, yetki: Yetki, depolama: Depolama) {
       const kayit = await ofisKaydi(ofisId);
       if (ayarlar.varsayilanMuzikId) await secilebilirMuzik(ayarlar.varsayilanMuzikId, kayit.id);
       if (ayarlar.varsayilanResimId) await secilebilirResim(ayarlar.varsayilanResimId, kayit.id);
+      if (ayarlar.varsayilanLogoId) await secilebilirLogo(ayarlar.varsayilanLogoId, kayit.id);
       const adDegisti = ayarlar.ad !== undefined && ayarlar.ad !== kayit.ad;
       if (adDegisti && (await db.query.ofis.findFirst({ where: and(eq(ofis.ad, ayarlar.ad!), ne(ofis.id, kayit.id)), columns: { id: true } }))) {
         throw new DuzenlemeHatasi(`"${ayarlar.ad}" adıyla başka bir şirket kayıtlı. Farklı bir ad yazın.`);
@@ -194,25 +231,45 @@ export function depoOlustur(db: Veritabani, yetki: Yetki, depolama: Depolama) {
       return (await db.query.sirketResmi.findFirst({ where: and(eq(sirketResmi.id, id), eq(sirketResmi.ofisId, kayit.ofisId)) })) ?? null;
     },
 
-    /** Yeni logoyu yazar, eskisini siler. */
-    async logoKaydet(logo: Pick<IslenmisLogo, "dosyaAdi" | "icerik" | "icerikTuru">, ofisId?: string) {
-      const kayit = await ofisKaydi(ofisId);
-      const anahtar = anahtariDogrula(`${ofisOneki(kayit.id)}logo/${logo.dosyaAdi}`);
+    /** Şirketin logoları, yüklenme sırasıyla. Admin ofis belirtmeli. */
+    async logolar(ofisId?: string) {
+      const hedef = hedefOfis(yetki, ofisId);
+      return db.query.sirketLogosu.findMany({ where: eq(sirketLogosu.ofisId, hedef), orderBy: asc(sirketLogosu.olusturma) });
+    },
+
+    /** Logoyu yazar ve kaydeder; şirketin ilk logosu varsayılan olur. En fazla `EN_FAZLA_SIRKET_LOGOSU`. */
+    async logoEkle(logo: Pick<IslenmisLogo, "dosyaAdi" | "icerik" | "icerikTuru">, ofisId?: string) {
+      const sahip = await ofisKaydi(ofisId);
+      if ((await db.$count(sirketLogosu, eq(sirketLogosu.ofisId, sahip.id))) >= EN_FAZLA_SIRKET_LOGOSU) {
+        throw new DuzenlemeHatasi(`En fazla ${EN_FAZLA_SIRKET_LOGOSU} logo yüklenebilir. Yenisi için birini silin.`);
+      }
+      const anahtar = anahtariDogrula(`${ofisOneki(sahip.id)}logo/${logo.dosyaAdi}`);
       await depolama.yaz(anahtar, logo.icerik, logo.icerikTuru);
       try {
-        await db.update(ofis).set({ logoAnahtari: anahtar }).where(eq(ofis.id, kayit.id));
+        const [kayit] = await db.insert(sirketLogosu).values({ ofisId: sahip.id, anahtar }).returning();
+        if (!sahip.varsayilanLogoId) await db.update(ofis).set({ varsayilanLogoId: kayit!.id }).where(eq(ofis.id, sahip.id));
+        return kayit!;
       } catch (hata) {
         await depolama.sil(anahtar);
         throw hata;
       }
-      if (kayit.logoAnahtari) await depolama.sil(kayit.logoAnahtari);
     },
 
-    async logoSil(ofisId?: string) {
-      const kayit = await ofisKaydi(ofisId);
-      if (!kayit.logoAnahtari) return;
-      await db.update(ofis).set({ logoAnahtari: null }).where(eq(ofis.id, kayit.id));
-      await depolama.sil(kayit.logoAnahtari);
+    /** Kullanan ilanlar şirketin varsayılanına, varsayılan olarak seçen şirket "logo yok"a döner. Üretilmiş videolar değişmez. */
+    async logoSil(id: string) {
+      const kayit = await db.query.sirketLogosu.findFirst({ where: and(eq(sirketLogosu.id, id), ofisKosulu(yetki, sirketLogosu.ofisId)) });
+      if (!kayit) throw new BulunamadiHatasi("Logo bulunamadı.");
+      await db.delete(sirketLogosu).where(eq(sirketLogosu.id, kayit.id));
+      await depolama.sil(kayit.anahtar);
+    },
+
+    /** İlanda gösterilecek logo (ilanın seçimi veya şirketin varsayılanı); yoksa `null`. */
+    async ilanLogosu(ilanId: string) {
+      const kayit = await ilanBul(ilanId);
+      const sahip = (await db.query.ofis.findFirst({ where: eq(ofis.id, kayit.ofisId) }))!;
+      const id = ilanLogoId(sahip, kayit);
+      if (!id) return null;
+      return (await db.query.sirketLogosu.findFirst({ where: and(eq(sirketLogosu.id, id), eq(sirketLogosu.ofisId, kayit.ofisId)) })) ?? null;
     },
 
     /**
@@ -295,11 +352,11 @@ export function depoOlustur(db: Veritabani, yetki: Yetki, depolama: Depolama) {
       return m && muzikKullanilabilir(m, kayit.ofisId) ? m : null;
     },
 
-    /** İlanın teması, müziği ve kapanış resmi. Değişirse eski video geçerliliğini yitirir ve ilan taslağa döner; senaryo korunur. */
+    /** İlanın teması, müziği, kapanış resmi ve logosu. Değişirse eski video geçerliliğini yitirir ve ilan taslağa döner; senaryo korunur. */
     async ilanGorunumunuKaydet(ilanId: string, secim: IlanGorunumSecimi) {
       const kayit = await duzenlenecekIlan(ilanId);
       const yeni = await gorunumSeciminiDogrula(secim, kayit.ofisId, kayit);
-      if (kayit.tema === yeni.tema && kayit.muzikSecimi === yeni.muzikSecimi && kayit.muzikId === yeni.muzikId && kayit.resimSecimi === yeni.resimSecimi && kayit.resimId === yeni.resimId) return;
+      if ((Object.keys(yeni) as (keyof typeof yeni)[]).every((k) => kayit[k] === yeni[k])) return;
       await db.update(ilan).set({ ...yeni, durum: "taslak", hata: null }).where(eq(ilan.id, ilanId));
     },
 

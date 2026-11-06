@@ -7,7 +7,7 @@ import { duzenlenenSenaryo, SenaryoHatasi, type SenaryoSonucu } from "@cekirdek/
 import { iletisimBilgisi } from "@cekirdek/pipeline/videoProps.js";
 import { temaAdiMi } from "@cekirdek/remotion/temalar.js";
 import { DuzenlemeHatasi, type IlanGorunumSecimi } from "@cekirdek/veri/depo.js";
-import { SECIMLER } from "@cekirdek/veri/gorunum.js";
+import { type Secim, SECIMLER } from "@cekirdek/veri/gorunum.js";
 import { type AlanHatalari, type FormAlanlari, fotografTuruMu, ilanFormunuDogrula } from "@cekirdek/veri/ilanFormu.js";
 import { type IsTuru, isEkle } from "@cekirdek/worker/kuyruk.js";
 import { kullaniciMesaji } from "@/lib/hatalar";
@@ -21,15 +21,24 @@ export type EylemSonucu = { hata: string | null };
 const formAlanlari = (form: FormData): FormAlanlari =>
   Object.fromEntries([...form.entries()].filter(([ad, d]) => typeof d === "string" && !ad.startsWith("$ACTION")).map(([ad, d]) => [ad, d as string]));
 
-/** Formdaki "Görünüm" bölümü: "" şirket varsayılanı, "yok", veya kimlik. Bölüm gösterilmediyse (admin yeni ilan) `undefined`. */
+/** Formdaki "Görünüm" ve "Logo ve kapanış resmi" bölümleri: "" şirket varsayılanı, "yok", veya kimlik. Bölüm gösterilmediyse (admin yeni ilan) `undefined`. */
 function gorunumSecimiFormdan(d: FormAlanlari): IlanGorunumSecimi | undefined {
-  if (d["gorunum.muzik"] === undefined && d["gorunum.resim"] === undefined && d["gorunum.tema"] === undefined) return undefined;
+  if (["gorunum.muzik", "gorunum.resim", "gorunum.logo", "gorunum.tema"].every((ad) => d[ad] === undefined)) return undefined;
   const secim = (deger: string | undefined) =>
     !deger ? { secim: "ofis" as const, id: null } : deger === "yok" ? { secim: "yok" as const, id: null } : { secim: "secili" as const, id: deger };
   const muzik = secim(d["gorunum.muzik"]);
   const resim = secim(d["gorunum.resim"]);
+  const logo = secim(d["gorunum.logo"]);
   const tema = d["gorunum.tema"];
-  return { tema: temaAdiMi(tema) ? tema : null, muzikSecimi: muzik.secim, muzikId: muzik.id, resimSecimi: resim.secim, resimId: resim.id };
+  return {
+    tema: temaAdiMi(tema) ? tema : null,
+    muzikSecimi: muzik.secim,
+    muzikId: muzik.id,
+    resimSecimi: resim.secim,
+    resimId: resim.id,
+    logoSecimi: logo.secim,
+    logoId: logo.id,
+  };
 }
 
 /** Bilinen hatayı mesaja çevirir; beklenmeyen hata Next.js'in hata sayfasına gider ve loglanır. */
@@ -183,11 +192,12 @@ export async function videoOnayla(ilanId: string, videoId: string, isaretlenenle
   });
 }
 
-/** İlanın teması (boşsa şirket varsayılanı), müziği ve kapanış resmi. Değişirse ilan taslağa döner; senaryo korunur. */
+/** İlanın teması (boşsa şirket varsayılanı), müziği, kapanış resmi ve logosu. Değişirse ilan taslağa döner; senaryo korunur. */
 export async function ilanGorunumuKaydet(ilanId: string, secim: IlanGorunumSecimi): Promise<EylemSonucu> {
   const { depo } = await girisGerekli();
   if (secim.tema !== null && !temaAdiMi(secim.tema)) return { hata: "Geçersiz tema." };
-  if (!SECIMLER.includes(secim.muzikSecimi) || (secim.resimSecimi !== undefined && !SECIMLER.includes(secim.resimSecimi))) return { hata: "Geçersiz seçim." };
+  const gecersiz = (s: unknown) => s !== undefined && !SECIMLER.includes(s as Secim);
+  if (!SECIMLER.includes(secim.muzikSecimi) || gecersiz(secim.resimSecimi) || gecersiz(secim.logoSecimi)) return { hata: "Geçersiz seçim." };
   return eylem(() =>
     depo.ilanGorunumunuKaydet(ilanId, {
       tema: secim.tema,
@@ -195,6 +205,8 @@ export async function ilanGorunumuKaydet(ilanId: string, secim: IlanGorunumSecim
       muzikId: secim.muzikId ?? null,
       resimSecimi: secim.resimSecimi,
       resimId: secim.resimId ?? null,
+      logoSecimi: secim.logoSecimi,
+      logoId: secim.logoId ?? null,
     }),
   );
 }

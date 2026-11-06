@@ -3,7 +3,7 @@ import { BulunamadiHatasi } from "@cekirdek/veri/yetki.js";
 import { kullaniciMesaji } from "@/lib/hatalar";
 import { hataYaniti, yuklemeIstegi } from "@/lib/yukleme";
 
-/** Ofis logosunu yükler (`dosya`; admin için `ofisId`). Uyarılar (ör. açık temada görünmeyecek beyaz logo) yanıtta döner. */
+/** Şirkete yeni logo ekler (`dosya`; admin için `ofisId`). Uyarılar (ör. açık temada görünmeyecek beyaz logo) yanıtta döner. */
 export async function POST(istek: Request) {
   const yukleme = await yuklemeIstegi(istek, LOGO_EN_BUYUK_MB);
   if (yukleme instanceof Response) return yukleme;
@@ -11,8 +11,8 @@ export async function POST(istek: Request) {
 
   try {
     const logo = await logoyuIsle(yukleme.icerik);
-    await yukleme.depo.logoKaydet(logo, ofisId);
-    return Response.json({ uyarilar: logo.uyarilar }, { status: 201 });
+    const kayit = await yukleme.depo.logoEkle(logo, ofisId);
+    return Response.json({ id: kayit.id, uyarilar: logo.uyarilar }, { status: 201 });
   } catch (e) {
     const mesaj = kullaniciMesaji(e);
     if (!mesaj) throw e;

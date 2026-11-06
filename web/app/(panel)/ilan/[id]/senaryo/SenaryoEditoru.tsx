@@ -15,7 +15,7 @@ import { FOTOGRAF_TURU_ADLARI, fotografTuruMu } from "@cekirdek/veri/ilanFormu.j
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FormSatiri } from "@/components/FormSatiri";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -103,13 +103,9 @@ export function SenaryoEditoru({ ilanId, ilan, senaryo, fotograflar, kilitli }: 
                   kilitli={kilitli}
                   degistir={(d) => guncelle(sira, "baslik", d)}
                 />
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor={`s${sira}-disSes`}>Dış ses (okunacak metin)</Label>
+                <FormSatiri ad={`s${sira}-disSes`} etiket="Dış ses (okunacak metin)" aciklama={`${kelimeSayisi(s.disSes)} kelime · Okunuşu: ${doldur(s.disSes, "ses")}`}>
                   <Textarea id={`s${sira}-disSes`} rows={3} value={s.disSes} disabled={kilitli} onChange={(e) => guncelle(sira, "disSes", e.target.value)} />
-                  <p className="text-xs text-muted-foreground">
-                    {kelimeSayisi(s.disSes)} kelime · Okunuşu: {doldur(s.disSes, "ses")}
-                  </p>
-                </div>
+                </FormSatiri>
                 <MetinAlani
                   id={`s${sira}-ekranMetni`}
                   etiket="Ekran metni (altta sabit)"
@@ -177,12 +173,11 @@ export function SenaryoEditoru({ ilanId, ilan, senaryo, fotograflar, kilitli }: 
 function MetinAlani(p: { id: string; etiket: string; deger: string; sinir: number; onizleme: string; kilitli: boolean; degistir: (d: string) => void }) {
   const uzunluk = [...p.onizleme].length;
   return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={p.id}>{p.etiket}</Label>
+    <FormSatiri ad={p.id} etiket={p.etiket}>
       <Input id={p.id} value={p.deger} disabled={p.kilitli} onChange={(e) => p.degistir(e.target.value)} aria-invalid={uzunluk > p.sinir} />
       <p className={cn("text-xs", uzunluk > p.sinir ? "text-destructive" : "text-muted-foreground")}>
         {uzunluk}/{p.sinir} karakter{p.onizleme !== p.deger ? ` · Videoda: ${p.onizleme}` : ""}
       </p>
-    </div>
+    </FormSatiri>
   );
 }

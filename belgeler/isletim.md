@@ -147,3 +147,16 @@ Silme işlemleri geri alınamaz. Yanlışlıkla silinen veritabanı kaydı yedek
 | Haftada bir | `tail /var/log/kliplan-yedek.log /var/log/kliplan-bakim.log`, disk doluluğu (`df -h`), `kc ps` |
 | Ayda bir | `git pull` ve güncelleme (kurulum.md → Güncelleme), Docker imajlarını tazeleme: `kc pull && kc up -d --build` |
 | Üç ayda bir | Geri yükleme denemesi |
+
+## Müzik kütüphanesi
+
+Hazır kütüphanedeki müzikleri bütün şirketler görür, lisanslarını yönetici sağlar. Panelden tek tek (Müzik → Kütüphaneye müzik ekle) veya toplu olarak komutla eklenir:
+
+1. Dosyaları (MP3, M4A veya WAV; 5 sn - 10 dk, en fazla 15 MB) bir klasöre koyun. Yanına `muzikler.json` yazın:
+   ```json
+   [{ "dosya": "enerjik-1.mp3", "ad": "Enerjik pop", "lisans": "CC0 1.0 · https://ornek.org/parca/123" }]
+   ```
+   `lisans` kontrol raporuna aynen yazılır: lisansın adı ve parçanın indirildiği sayfa. Yalnızca ticari kullanıma ve atıf gerektirmeden videoda kullanılmaya izin veren lisanslar (ör. CC0) seçin.
+2. Klasörü sunucuya kopyalayıp çalıştırın: `kc run --rm --no-deps -v "$PWD/muzikler:/muzikler" worker npm run muzik:kutuphane -- /muzikler`. Aynı adlı müzik varsa atlanır.
+
+Not: FreePD.com 2025 sonunda kapandı; CC0 müzik için başka kaynak kullanın.

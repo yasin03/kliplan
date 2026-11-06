@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { gorunumAlanlari, ilanMuzikId, ilanResimId, type MuzikKaydi, muzikIzni, ofisAyarFormunuDogrula, sirketBilgileri } from "../src/veri/gorunum.js";
+import { gorunumAlanlari, ilanLogoId, ilanMuzikId, ilanResimId, type MuzikKaydi, muzikIzni, ofisAyarFormunuDogrula, sirketBilgileri } from "../src/veri/gorunum.js";
 import { GorunumDosyasiHatasi, logoyuIsle, muzigiIsle } from "../src/veri/gorunumIsleme.js";
 import { ilanJsonuOlustur } from "../src/veri/ilanFormu.js";
 import { sessizWav, temurlarVerisi } from "./yardimci.js";
@@ -70,7 +70,7 @@ describe("müzik işleme", () => {
 });
 
 describe("görünüm çözümü", () => {
-  const ofis = { tema: "koyu", vurguRengi: null, logoAnahtari: null, varsayilanMuzikId: "varsayilan" };
+  const ofis = { tema: "koyu", vurguRengi: null, varsayilanMuzikId: "varsayilan" };
 
   it("ilanın müzik seçimi: ofis varsayılanı, müziksiz, seçili (silinmişse varsayılan)", () => {
     expect(ilanMuzikId(ofis, { muzikSecimi: "ofis", muzikId: null })).toBe("varsayilan");
@@ -80,7 +80,7 @@ describe("görünüm çözümü", () => {
   });
 
   it("ilan.json alanları: ilan teması ofisinkini geçersiz kılıyor; logo ve müzik dosya adları", () => {
-    const alanlar = gorunumAlanlari({ ...ofis, tema: "sade", vurguRengi: "#2BB673", logoAnahtari: "ofis/x/logo/ab12cd34.png" }, { tema: "acik" }, muzikKaydi());
+    const alanlar = gorunumAlanlari({ ...ofis, tema: "sade", vurguRengi: "#2BB673" }, { tema: "acik" }, muzikKaydi(), null, { anahtar: "ofis/x/logo/ab12cd34.png" });
     expect(alanlar).toEqual({
       tema: "acik",
       vurguRengi: "#2BB673",
@@ -160,6 +160,15 @@ describe("görünüm çözümü", () => {
     expect(ilanResimId(o, { resimSecimi: "yok", resimId: "r1" })).toBeNull();
     expect(ilanResimId(o, { resimSecimi: "secili", resimId: "r1" })).toBe("r1");
     expect(ilanResimId({ varsayilanResimId: null }, { resimSecimi: "ofis", resimId: null })).toBeNull();
+  });
+
+  it("ilanın logo seçimi: şirket varsayılanı, videoda gösterme, seçili (silinmişse varsayılan)", () => {
+    const o = { varsayilanLogoId: "l0" };
+    expect(ilanLogoId(o, { logoSecimi: "ofis", logoId: null })).toBe("l0");
+    expect(ilanLogoId(o, { logoSecimi: "yok", logoId: "l1" })).toBeNull();
+    expect(ilanLogoId(o, { logoSecimi: "secili", logoId: "l1" })).toBe("l1");
+    expect(ilanLogoId(o, { logoSecimi: "secili", logoId: null })).toBe("l0");
+    expect(ilanLogoId({}, {})).toBeNull();
   });
 
   it("şirket bilgilerinden yalnızca seçilen ve dolu olanlar, ekran biçiminde kapanışa gidiyor", () => {

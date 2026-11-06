@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { and, asc, eq, max } from "drizzle-orm";
 import type { Veritabani } from "../db/baglanti.js";
-import { fotograf, ilan, type KayitliHata, muzik, ofis, sirketResmi, uretimIsi, video } from "../db/sema.js";
+import { fotograf, ilan, type KayitliHata, muzik, ofis, sirketLogosu, sirketResmi, uretimIsi, video } from "../db/sema.js";
 import { anahtariDogrula, type Depolama, ilanOneki } from "../depolama/Depolama.js";
 import { FOTOGRAF_KLASORU, ILAN_DOSYASI } from "../pipeline/dogrulama.js";
 import type { videoyuRenderEt } from "../pipeline/render.js";
@@ -11,7 +11,7 @@ import { duzenlenenSenaryo, SenaryoHatasi, type SenaryoSonucu } from "../pipelin
 import { AdimHatasi, ilanHazirla, senaryoAsamasi, videoAsamasi } from "../pipeline/uretim.js";
 import type { ScriptProvider } from "../providers/ScriptProvider.js";
 import type { TtsProvider } from "../providers/TtsProvider.js";
-import { gorunumAlanlari, ilanMuzikId, ilanResimId, muzikKullanilabilir } from "../veri/gorunum.js";
+import { gorunumAlanlari, ilanLogoId, ilanMuzikId, ilanResimId, muzikKullanilabilir } from "../veri/gorunum.js";
 import { ilanJsonuOlustur } from "../veri/ilanFormu.js";
 
 export type IsBaglami = {
@@ -72,7 +72,7 @@ export async function isiHataylaKapat(db: Veritabani, isId: string, hata: Kayitl
   });
 }
 
-/** Veritabanındaki ilanı pipeline'ın okuduğu klasör yapısına çevirir: `ilan.json` + `fotograflar/`, varsa logo, müzik ve kapanış resmi. */
+/** Veritabanındaki ilanı pipeline'ın okuduğu klasör yapısına çevirir: `ilan.json` + `fotograflar/`, varsa seçilen logo, müzik ve kapanış resmi. */
 async function ilanKlasoruKur(b: IsBaglami, ilanId: string, klasor: string) {
   const kayit = await b.db.query.ilan.findFirst({ where: eq(ilan.id, ilanId) });
   if (!kayit) throw new AdimHatasi("1/6 Doğrulama", "İlan bulunamadı; silinmiş olabilir.", "");
@@ -88,14 +88,19 @@ async function ilanKlasoruKur(b: IsBaglami, ilanId: string, klasor: string) {
     ? ((await b.db.query.sirketResmi.findFirst({ where: and(eq(sirketResmi.id, resimId), eq(sirketResmi.ofisId, kayit.ofisId)) })) ?? null)
     : null;
 
-  const gorunum = gorunumAlanlari(ofisKaydi, kayit, muzikKaydi, resimKaydi);
+  const logoId = ilanLogoId(ofisKaydi, kayit);
+  const logoKaydi = logoId
+    ? ((await b.db.query.sirketLogosu.findFirst({ where: and(eq(sirketLogosu.id, logoId), eq(sirketLogosu.ofisId, kayit.ofisId)) })) ?? null)
+    : null;
+
+  const gorunum = gorunumAlanlari(ofisKaydi, kayit, muzikKaydi, resimKaydi, logoKaydi);
   const json = ilanJsonuOlustur(kayit.veri, ofisKaydi, fotograflar, gorunum);
   if (!json.basarili) throw new AdimHatasi("1/6 Doğrulama", json.hatalar.join("\n"), "");
 
   await mkdir(path.join(klasor, FOTOGRAF_KLASORU), { recursive: true });
   await writeFile(path.join(klasor, ILAN_DOSYASI), JSON.stringify(json.ilan, null, 2));
   for (const f of fotograflar) await writeFile(path.join(klasor, FOTOGRAF_KLASORU, f.dosyaAdi), await b.depolama.oku(f.anahtar));
-  if (gorunum.logo && ofisKaydi.logoAnahtari) await writeFile(path.join(klasor, gorunum.logo), await b.depolama.oku(ofisKaydi.logoAnahtari));
+  if (gorunum.logo && logoKaydi) await writeFile(path.join(klasor, gorunum.logo), await b.depolama.oku(logoKaydi.anahtar));
   if (gorunum.muzik && muzikKaydi) await writeFile(path.join(klasor, gorunum.muzik.dosya), await b.depolama.oku(muzikKaydi.anahtar));
   if (gorunum.kapanisResmi && resimKaydi) await writeFile(path.join(klasor, gorunum.kapanisResmi), await b.depolama.oku(resimKaydi.anahtar));
   return kayit;
@@ -211,6 +216,7 @@ export async function isiCalistir(b: IsBaglami, isId: string): Promise<void> {
           boyutBayt: sonuc.dosyaBoyutuBayt,
           maliyetUsd: sonuc.toplamMaliyetUsd,
           test: b.test,
+          gizliAlanlar: hazir.ilan.gizli,
         });
         await tx.update(ilan).set({ durum: "kontrol_bekliyor", hata: null }).where(eq(ilan.id, kayit.id));
         await tx

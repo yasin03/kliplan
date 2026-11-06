@@ -24,6 +24,47 @@ export const FOTOGRAF_TURLERI = [
 
 const bosOlmayanMetin = z.string().trim().min(1);
 
+/**
+ * Emlakçının "videoda göster" anahtarını kapatabildiği bilgiler. Gizlenen bilgi senaryoya, ekrana ve kapanış kartına girmez.
+ * Logo ve kapanış resmi burada değil: onlar ilanın görünüm seçimiyle (`yok`) kapatılır.
+ */
+export const GIZLENEBILIR_ALANLAR = [
+  "fiyat",
+  "konum",
+  "telefon",
+  "yetkiBelgeNo",
+  "odaSayisi",
+  "netM2",
+  "binaYasi",
+  "kat",
+  "isitma",
+  "mutfak",
+  "tapu",
+  "esyali",
+  "krediyeUygun",
+  "ozellikler",
+  "kiraDurumu",
+] as const;
+export type GizlenebilirAlan = (typeof GIZLENEBILIR_ALANLAR)[number];
+
+export const GIZLENEBILIR_ALAN_ADLARI: Record<GizlenebilirAlan, string> = {
+  fiyat: "Fiyat",
+  konum: "Konum",
+  telefon: "Telefon",
+  yetkiBelgeNo: "Yetki belge no",
+  odaSayisi: "Oda sayısı",
+  netM2: "Net m²",
+  binaYasi: "Bina yaşı",
+  kat: "Kat",
+  isitma: "Isıtma",
+  mutfak: "Mutfak",
+  tapu: "Tapu",
+  esyali: "Eşyalı",
+  krediyeUygun: "Krediye uygun",
+  ozellikler: "Diğer özellikler",
+  kiraDurumu: "Kullanım durumu",
+};
+
 export const fotografSemasi = z.strictObject({
   dosya: bosOlmayanMetin.regex(/^[^/\\]+\.(jpe?g|png|webp)$/i, {
     error: "Fotoğraf dosya adı .jpg, .jpeg, .png veya .webp ile bitmeli ve klasör yolu içermemeli",
@@ -69,6 +110,8 @@ export const ilanSemasi = z.strictObject({
   tapu: bosOlmayanMetin.optional(),
   ozellikler: z.array(bosOlmayanMetin).default([]),
   kiraDurumu: kiraDurumuSemasi.optional(),
+  /** Videoda gösterilmeyecek bilgiler; boşsa hepsi gösterilir. */
+  gizli: z.array(z.enum(GIZLENEBILIR_ALANLAR)).default([]),
   logo: bosOlmayanMetin.optional(),
   /** Renk teması: koyu, acik, sade. Verilmezse koyu. */
   tema: z.enum(TEMA_ADLARI, { error: `Tema şunlardan biri olmalı: ${TEMA_ADLARI.join(", ")}` }).optional(),
@@ -102,5 +145,22 @@ export const ilanSemasi = z.strictObject({
 });
 
 export type Ilan = z.infer<typeof ilanSemasi>;
+
+/** Bilgi videoda gösterilecek mi? */
+export const gorunur = (ilan: Pick<Ilan, "gizli">, alan: GizlenebilirAlan) => !ilan.gizli.includes(alan);
+
+/**
+ * Senaryonun "gördüğü" ilan: gizlenen isteğe bağlı bilgiler çıkarılır, gizli konum onaysız sayılır. Böylece yapay zekâya
+ * gönderilmez ve metinde geçerse senaryo doğrulaması yakalar. Zorunlu bilgileri (fiyat, oda, m², kat, bina yaşı)
+ * kullananlar ayrıca `gorunur` ile bakar. Aynı ilana iki kez uygulanabilir.
+ */
+export function videoIlani(ilan: Ilan): Ilan {
+  const sonuc: Ilan = { ...ilan, konum: gorunur(ilan, "konum") ? ilan.konum : { ...ilan.konum, onayli: false } };
+  if (!gorunur(ilan, "ozellikler")) sonuc.ozellikler = [];
+  for (const ad of ["isitma", "mutfak", "tapu", "esyali", "krediyeUygun", "kiraDurumu"] as const) {
+    if (!gorunur(ilan, ad)) delete sonuc[ad];
+  }
+  return sonuc;
+}
 export type Fotograf = z.infer<typeof fotografSemasi>;
 export type FotografTuru = (typeof FOTOGRAF_TURLERI)[number];

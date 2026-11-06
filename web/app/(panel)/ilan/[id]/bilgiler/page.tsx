@@ -16,6 +16,7 @@ export default async function IlanBilgileriSayfasi({ params }: PageProps<"/ilan/
     "gorunum.tema": ilan.tema ?? "",
     "gorunum.muzik": secimDegeri(ilan.muzikSecimi, ilan.muzikId),
     "gorunum.resim": secimDegeri(ilan.resimSecimi, ilan.resimId),
+    "gorunum.logo": secimDegeri(ilan.logoSecimi, ilan.logoId),
   };
 
   return (
@@ -24,7 +25,7 @@ export default async function IlanBilgileriSayfasi({ params }: PageProps<"/ilan/
       <AdimCubugu ilanId={id} etkin="bilgiler" />
       {ilan.durum === "kontrol_bekliyor" || ilan.durum === "onaylandi" ? (
         <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Bilgileri değiştirirseniz senaryo silinir ve videonun yeniden üretilmesi gerekir. Yalnızca görünümü değiştirirseniz senaryo korunur.
+          Bilgileri değiştirirseniz senaryo silinir ve videonun yeniden üretilmesi gerekir. Yalnızca görünümü (logo, kapanış resmi, tema, müzik) değiştirirseniz senaryo korunur.
         </p>
       ) : null}
       <IlanFormu ilanId={id} baslangic={baslangic} ofisAdi={ofis.ad} gorunum={gorunum} />

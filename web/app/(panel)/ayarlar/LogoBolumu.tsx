@@ -3,6 +3,7 @@
 import { ImagePlus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
+import type { ResimSecenegi } from "@/components/ResimSecici";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,11 +12,13 @@ import { logoSil } from "./eylemler";
 type Props = {
   /** Yalnızca admin için; üye kendi ofisini düzenler. */
   ofisId: string | null;
-  /** Mevcut logonun kısa ömürlü bağlantısı. */
-  adres: string | null;
+  /** Logolar, kısa ömürlü bağlantılarıyla. */
+  logolar: ResimSecenegi[];
+  enFazla: number;
 };
 
-export function LogoBolumu({ ofisId, adres }: Props) {
+/** Şirketin logoları. Varsayılan logo aşağıdaki formda, ilanın logosu ilan bilgilerinde seçilir. */
+export function LogoBolumu({ ofisId, logolar, enFazla }: Props) {
   const router = useRouter();
   const girdi = useRef<HTMLInputElement>(null);
   const [yukleniyor, setYukleniyor] = useState(false);
@@ -46,42 +49,47 @@ export function LogoBolumu({ ofisId, adres }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Logo</CardTitle>
+        <CardTitle>Logolar</CardTitle>
         <CardDescription>
-          Videonun üst köşesinde ve kapanış kartında şirket adının yanında görünür. Saydam zeminli PNG önerilir. Logo yoksa yalnızca şirket adı gösterilir.
+          Videonun üst köşesinde ve kapanış kartında şirket adının yanında görünür. Birden fazla logo yükleyip her ilanda birini seçebilirsiniz. Saydam zeminli PNG önerilir.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-4">
-          {adres ? (
-            // Koyu ve açık temada nasıl göründüğü: iki zeminde yan yana.
-            <div className="flex gap-2">
-              {["bg-[#0B1F3A]", "bg-white border"].map((zemin) => (
-                <div key={zemin} className={`flex h-20 w-40 items-center justify-center rounded-lg p-3 ${zemin}`}>
-                  <img src={adres} alt="Şirket logosu" className="max-h-full max-w-full object-contain" />
+        {logolar.length ? (
+          <ul className="flex flex-col gap-3">
+            {logolar.map((l) => (
+              <li key={l.deger} className="flex flex-wrap items-center gap-3">
+                <span className="w-14 text-sm">{l.etiket}</span>
+                {/* Koyu ve açık temada nasıl göründüğü: iki zeminde yan yana. */}
+                <div className="flex gap-2">
+                  {["bg-[#0B1F3A]", "bg-white border"].map((zemin) => (
+                    <div key={zemin} className={`flex h-16 w-32 items-center justify-center rounded-lg p-2 ${zemin}`}>
+                      <img src={l.adres ?? ""} alt={l.etiket} className="max-h-full max-w-full object-contain" />
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Henüz logo yüklenmedi.</p>
-          )}
-          <div className="flex gap-2">
-            <Button variant="outline" disabled={mesgul} onClick={() => girdi.current?.click()}>
-              <ImagePlus /> {yukleniyor ? "Yükleniyor…" : adres ? "Logoyu değiştir" : "Logo yükle"}
-            </Button>
-            {adres ? (
-              <Button
-                variant="ghost"
-                disabled={mesgul}
-                onClick={() => {
-                  if (!confirm("Logo silinsin mi? Bundan sonraki videolarda yalnızca şirket adı görünür.")) return;
-                  gecis(async () => setHata((await logoSil(ofisId)).hata));
-                }}
-              >
-                <Trash2 /> Sil
-              </Button>
-            ) : null}
-          </div>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={mesgul}
+                  aria-label={`${l.etiket} sil`}
+                  onClick={() => {
+                    if (!confirm(`${l.etiket} silinsin mi? Üretilmiş videolar etkilenmez; bu logoyu seçen ilanlar şirketin varsayılanına döner.`)) return;
+                    gecis(async () => setHata((await logoSil(l.deger)).hata));
+                  }}
+                >
+                  <Trash2 />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">Henüz logo yüklenmedi. Logo yoksa videoda yalnızca şirket adı gösterilir.</p>
+        )}
+        <div>
+          <Button variant="outline" disabled={mesgul || logolar.length >= enFazla} onClick={() => girdi.current?.click()}>
+            <ImagePlus /> {yukleniyor ? "Yükleniyor…" : "Logo ekle"}
+          </Button>
         </div>
         <input
           ref={girdi}
@@ -94,7 +102,9 @@ export function LogoBolumu({ ofisId, adres }: Props) {
             e.target.value = "";
           }}
         />
-        <p className="text-xs text-muted-foreground">PNG, JPEG veya WebP · en fazla 5 MB. SVG desteklenmez.</p>
+        <p className="text-xs text-muted-foreground">
+          PNG, JPEG veya WebP · en fazla 5 MB · {logolar.length}/{enFazla} logo. SVG desteklenmez.
+        </p>
         {hata ? (
           <Alert variant="destructive" aria-live="polite">
             <AlertDescription>{hata}</AlertDescription>

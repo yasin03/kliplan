@@ -11,12 +11,13 @@ export const tema = {
     dosya: "fontlar/Inter-Variable.ttf",
   },
   /**
-   * Reels, TikTok ve Shorts arayüzünün (üstte sekmeler, altta açıklama, sağda butonlar)
-   * kapatmadığı alan. Piksel cinsinden, 1080x1920 tuval için.
+   * Reels, TikTok ve Shorts arayüzünün (üstte sekmeler, altta açıklama, sağda butonlar) büyük ölçüde
+   * kapatmadığı alan. Piksel cinsinden, 1080x1920 tuval için. Boş görünmesin diye platform önerisinden
+   * (üst ~220, alt ~420) dar tutuldu: üstteki ofis adı ve alttaki ekran metni arayüze kısmen yaklaşabilir.
    */
   guvenliAlan: {
-    ust: 190,
-    alt: 420,
+    ust: 110,
+    alt: 260,
     sol: 64,
     sag: 64,
     /** Alt bölgede sağdaki beğen/yorum butonları için ek boşluk. */

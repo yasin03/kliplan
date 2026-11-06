@@ -24,6 +24,9 @@ ilanlar/*/fotograflar/*
 docs/
 ilanlar/
 
+# Kütüphane müzikleri (lisanslı dosyalar; `npm run muzik:kutuphane -- muzikler` ile depoya eklenir)
+muzikler/
+
 # Sistem
 .DS_Store
 *.log

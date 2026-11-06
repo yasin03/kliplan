@@ -7,12 +7,12 @@ import { VURGU_DESENI, vurguHatasi } from "@cekirdek/pipeline/renk.js";
 import { TEMA_ADLARI, type TemaAdi, TEMALAR } from "@cekirdek/remotion/temalar.js";
 import { KAPANIS_ALANI_ADLARI, KAPANIS_ALANLARI } from "@cekirdek/veri/kapanisAlanlari.js";
 import type { FormAlanlari } from "@cekirdek/veri/ilanFormu.js";
+import { FormSatiri } from "@/components/FormSatiri";
 import { ResimSecici, type ResimSecenegi } from "@/components/ResimSecici";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select";
 import { cn } from "@/lib/utils";
 import { type AyarDurumu, ofisAyarlariniKaydet } from "./eylemler";
@@ -22,9 +22,10 @@ type Props = {
   baslangic: FormAlanlari;
   muzikler: { id: string; ad: string; kutuphane: boolean }[];
   resimler: ResimSecenegi[];
+  logolar: ResimSecenegi[];
 };
 
-export function AyarlarFormu({ ofisId, baslangic, muzikler, resimler }: Props) {
+export function AyarlarFormu({ ofisId, baslangic, muzikler, resimler, logolar }: Props) {
   const [durum, gonder, bekliyor] = useActionState<AyarDurumu, FormData>(ofisAyarlariniKaydet.bind(null, ofisId), {
     hatalar: {},
     mesaj: null,
@@ -44,21 +45,17 @@ export function AyarlarFormu({ ofisId, baslangic, muzikler, resimler }: Props) {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Metin ad="ad" etiket="Şirket adı" d={d} h={h} />
-            <Metin ad="yetkiBelgeNo" etiket="Yetki belge numarası" d={d} h={h} sayisal />
-            <Metin ad="yetkiliAdi" etiket="Yetkili adı" d={d} h={h} />
-            <Metin ad="yetkiliSoyadi" etiket="Yetkili soyadı" d={d} h={h} />
-            <Metin ad="telefon" etiket="Sabit telefon" d={d} h={h} tur="tel" yerTutucu="0272 212 00 00" />
-            <Metin ad="cepTelefonu" etiket="Cep telefonu" d={d} h={h} tur="tel" yerTutucu="0505 709 44 88" />
-            <Metin ad="eposta" etiket="E-posta" d={d} h={h} tur="email" yerTutucu="bilgi@ornekemlak.com" />
-            <Metin ad="web" etiket="Web adresi" d={d} h={h} yerTutucu="ornekemlak.com" />
-          </div>
+          <Metin ad="ad" etiket="Şirket adı" d={d} h={h} />
+          <Metin ad="yetkiBelgeNo" etiket="Yetki belge numarası" d={d} h={h} sayisal />
+          <Metin ad="yetkiliAdi" etiket="Yetkili adı" d={d} h={h} />
+          <Metin ad="yetkiliSoyadi" etiket="Yetkili soyadı" d={d} h={h} />
+          <Metin ad="telefon" etiket="Sabit telefon" d={d} h={h} tur="tel" yerTutucu="0272 212 00 00" />
+          <Metin ad="cepTelefonu" etiket="Cep telefonu" d={d} h={h} tur="tel" yerTutucu="0505 709 44 88" />
+          <Metin ad="eposta" etiket="E-posta" d={d} h={h} tur="email" yerTutucu="bilgi@ornekemlak.com" />
+          <Metin ad="web" etiket="Web adresi" d={d} h={h} yerTutucu="ornekemlak.com" />
           <Metin ad="adres" etiket="Adres" d={d} h={h} yerTutucu="Mahalle, cadde/sokak, no" />
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Metin ad="il" etiket="İl" d={d} h={h} />
-            <Metin ad="ilce" etiket="İlçe" d={d} h={h} />
-          </div>
+          <Metin ad="il" etiket="İl" d={d} h={h} />
+          <Metin ad="ilce" etiket="İlçe" d={d} h={h} />
           <p className="text-xs text-muted-foreground">
             Adı değiştirirseniz mevcut ilanların senaryosu eski adı içerir; video üretmeden önce senaryoyu yeniden üretmeniz veya son sahneyi düzenlemeniz gerekir.
           </p>
@@ -97,12 +94,23 @@ export function AyarlarFormu({ ofisId, baslangic, muzikler, resimler }: Props) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Alan ad="varsayilanMuzikId" etiket="Varsayılan müzik" hata={h.varsayilanMuzikId}>
-            <NativeSelect id="varsayilanMuzikId" name="varsayilanMuzikId" defaultValue={d.varsayilanMuzikId ?? ""} className="w-full sm:w-96">
+          <FormSatiri ad="varsayilanMuzikId" etiket="Varsayılan müzik" hata={h.varsayilanMuzikId}>
+            <NativeSelect id="varsayilanMuzikId" name="varsayilanMuzikId" defaultValue={d.varsayilanMuzikId ?? ""} className="w-full">
               <NativeSelectOption value="">Müziksiz</NativeSelectOption>
               <MuzikSecenekleri muzikler={muzikler} />
             </NativeSelect>
-          </Alan>
+          </FormSatiri>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Varsayılan logo</CardTitle>
+          <CardDescription>Yeni ilanlarda bu logo görünür; her ilanda başka bir logo seçilebilir veya logo kapatılabilir. Logoları yukarıdaki "Logolar" bölümünden yükleyin.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ResimSecici ad="varsayilanLogoId" secenekler={[{ deger: "", etiket: "Logo yok", adres: null }, ...logolar]} varsayilan={d.varsayilanLogoId ?? ""} bicim="logo" />
+          {h.varsayilanLogoId ? <p className="text-sm text-destructive">{h.varsayilanLogoId}</p> : null}
         </CardContent>
       </Card>
 
@@ -208,10 +216,9 @@ function GorunumAlanlari({ d, h }: { d: FormAlanlari; h: Record<string, string> 
         </fieldset>
         {h.tema ? <p className="text-sm text-destructive">{h.tema}</p> : null}
 
-        <div className="flex flex-col gap-2">
-          <Label>Vurgu rengi</Label>
+        <FormSatiri etiket="Vurgu rengi">
           <p className="text-xs text-muted-foreground">Fiyat, çizgiler ve altyazı kenarı bu renkte olur. Fiyat okunabilsin diye renk her temanın zeminine göre kontrol edilir.</p>
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          <div className="flex min-h-8 flex-wrap items-center gap-x-5 gap-y-2 text-sm">
             <label className="flex items-center gap-2">
               <input type="radio" checked={!kendiRengi} onChange={() => setKendiRengi(false)} className="size-4 accent-primary" />
               Temanın kendi rengi
@@ -242,19 +249,9 @@ function GorunumAlanlari({ d, h }: { d: FormAlanlari; h: Record<string, string> 
               })}
             </ul>
           ) : null}
-        </div>
+        </FormSatiri>
       </CardContent>
     </Card>
-  );
-}
-
-function Alan({ ad, etiket, hata, children }: { ad: string; etiket: string; hata?: string | undefined; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={ad}>{etiket}</Label>
-      {children}
-      {hata ? <p className="text-sm text-destructive">{hata}</p> : null}
-    </div>
   );
 }
 
@@ -276,8 +273,8 @@ function Metin({
   sayisal?: boolean;
 }) {
   return (
-    <Alan ad={ad} etiket={etiket} hata={h[ad]}>
+    <FormSatiri ad={ad} etiket={etiket} hata={h[ad]}>
       <Input id={ad} name={ad} type={tur} defaultValue={d[ad] ?? ""} placeholder={yerTutucu} inputMode={sayisal ? "numeric" : undefined} aria-invalid={Boolean(h[ad])} />
-    </Alan>
+    </FormSatiri>
   );
 }
